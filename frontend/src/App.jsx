@@ -8,7 +8,7 @@ const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 axios.defaults.baseURL = API_BASE_URL;
 
@@ -66,6 +66,20 @@ function App() {
         return response.data;
     };
 
+    const register = async (email, password) => {
+        const response = await axios.post('/api/v1/auth/register', {
+            email,
+            password
+        });
+        const { access_token } = response.data;
+
+        localStorage.setItem('token', access_token);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+
+        await fetchUser();
+        return response.data;
+    };
+
     const logout = () => {
         localStorage.removeItem('token');
         delete axios.defaults.headers.common['Authorization'];
@@ -81,7 +95,7 @@ function App() {
     }
 
     return (
-        <AuthContext.Provider value={{ user, login, logout }}>
+        <AuthContext.Provider value={{ user, login, register, logout }}>
             <BrowserRouter>
                 <Routes>
                     <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />

@@ -42,14 +42,14 @@ async def health_check():
     }
 
 # Import and include routers
-from app.routers import auth, dashboard, trades, models, admin, settings, buckets, backtest, options
+from app.routers import auth, dashboard, trades, models, admin, settings as settings_router, buckets, backtest, options
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(trades.router, prefix="/api/v1/trades", tags=["trades"])
 app.include_router(models.router, prefix="/api/v1/models", tags=["models"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
-app.include_router(settings.router, prefix="/api/v1/settings", tags=["settings"])
+app.include_router(settings_router.router, prefix="/api/v1/settings", tags=["settings"])
 app.include_router(buckets.router, prefix="/api/v1/buckets", tags=["buckets"])
 app.include_router(backtest.router, prefix="/api/v1/backtest", tags=["backtesting"])
 app.include_router(options.router, prefix="/api/v1/options", tags=["options"])

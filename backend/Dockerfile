@@ -21,7 +21,8 @@ RUN pip install --no-cache-dir --retries 5 \
     fastapi==0.104.1 \
     uvicorn[standard]==0.24.0 \
     pydantic==2.5.0 \
-    pydantic-settings==2.1.0
+    pydantic-settings==2.1.0 \
+    email-validator==2.1.0
 
 # Stage 2: Database and caching
 RUN pip install --no-cache-dir --retries 5 \
@@ -60,6 +61,7 @@ RUN pip install --no-cache-dir --retries 5 \
     kiteconnect==4.2.0 \
     python-multipart==0.0.6 \
     python-jose[cryptography]==3.3.0 \
+    bcrypt==3.2.2 \
     passlib[bcrypt]==1.7.4 \
     cryptography==41.0.7 \
     requests==2.31.0 \

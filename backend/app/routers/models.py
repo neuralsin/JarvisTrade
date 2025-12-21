@@ -1,7 +1,7 @@
 """
 Models API routes - list models, trigger training, get metrics
 """
-from fastapi import APIRouter, Depends, Background Tasks
+from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.db.database import get_db

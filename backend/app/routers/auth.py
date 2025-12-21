@@ -13,9 +13,21 @@ from app.db.models import User
 from app.config import settings
 from app.utils.crypto import encrypt_text, decrypt_text
 import logging
+import hashlib
+import base64
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _prepare_password(password: str) -> str:
+    """
+    Pre-hash password with SHA256 and encode as base64 before bcrypt.
+    This avoids bcrypt's 72-byte limitation while maintaining security.
+    The base64 encoded SHA256 hash is 44 characters, well within the 72-byte limit.
+    """
+    password_hash = hashlib.sha256(password.encode('utf-8')).digest()
+    return base64.b64encode(password_hash).decode('ascii')
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -85,7 +97,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Create new user
-    hashed_password = pwd_context.hash(user_data.password)
+    hashed_password = pwd_context.hash(_prepare_password(user_data.password))
     new_user = User(
         email=user_data.email,
         password_hash=hashed_password
@@ -107,7 +119,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     Login user
     """
     user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not pwd_context.verify(form_data.password, user.password_hash):
+    if not user or not pwd_context.verify(_prepare_password(form_data.password), user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
