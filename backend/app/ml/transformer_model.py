@@ -91,7 +91,7 @@ class TransformerPredictor:
             x = layers.LayerNormalization(epsilon=1e-6)(x)
         
         # Global pooling
-        x = layers.GlobalAveragePoolingi()(x)
+        x = layers.GlobalAveragePooling1D()(x)
         
         # Classification head
         x = layers.Dropout(0.3)(x)

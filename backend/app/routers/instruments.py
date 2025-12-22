@@ -25,6 +25,7 @@ class AddInstrumentRequest(BaseModel):
     symbol: str
     name: Optional[str] = None
     exchange: str = "NSE"
+    data_period: str = "60d"  # Default 60 days
 
 
 @router.get("/")
@@ -56,7 +57,16 @@ async def validate_symbol(
     Validate if stock symbol exists on exchange
     Uses Yahoo Finance to check symbol validity
     """
-    ticker_symbol = f"{request.symbol}.{request.exchange}"
+    # Map exchange codes to Yahoo Finance suffixes
+    exchange_suffix_map = {
+        "NSE": "NS",  # National Stock Exchange
+        "NS": "NS",   # Alias
+        "BSE": "BO",  # Bombay Stock Exchange
+        "BO": "BO"    # Alias
+    }
+    
+    suffix = exchange_suffix_map.get(request.exchange, request.exchange)
+    ticker_symbol = f"{request.symbol}.{suffix}"
     
     try:
         ticker = yf.Ticker(ticker_symbol)
@@ -149,18 +159,30 @@ async def add_instrument(
     
     logger.info(f"Added instrument: {instrument.symbol} ({instrument.name})")
     
-    # Trigger background data fetch for last 60 days (Yahoo limit for 15m)
+    # Trigger background data fetch based on period
     try:
         from app.tasks.data_ingestion import fetch_historical_data
         
         end_date = datetime.utcnow().strftime('%Y-%m-%d')
-        start_date = (datetime.utcnow() - timedelta(days=59)).strftime('%Y-%m-%d')
+        
+        # Calculate start date and interval based on period
+        period_map = {
+            '60d': (59, '15m'),   # 60 days, 15min candles
+            '1y': (365, '1d'),    # 1 year, daily candles
+            '2y': (730, '1d'),    # 2 years, daily candles
+            '5y': (1825, '1d')    # 5 years, daily candles
+        }
+        
+        days, interval = period_map.get(request.data_period, (59, '15m'))
+        start_date = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d')
+        
+        logger.info(f"Fetching {request.data_period} of data for {instrument.symbol}: {start_date} to {end_date}, interval={interval}")
         
         task = fetch_historical_data.delay(
             symbols=[instrument.symbol],
             start_date=start_date,
             end_date=end_date,
-            interval='15m',
+            interval=interval,
             exchange=request.exchange
         )
         
@@ -171,7 +193,7 @@ async def add_instrument(
             "id": str(instrument.id),
             "symbol": instrument.symbol,
             "name": instrument.name,
-            "message": f"Added {instrument.symbol}. Fetching historical data in background...",
+            "message": f"Added {instrument.symbol}. Fetching {request.data_period} of historical data...",
             "data_fetch_task_id": task.id
         }
     

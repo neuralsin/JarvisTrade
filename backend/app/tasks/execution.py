@@ -61,8 +61,10 @@ def _check_signals_for_user(db, user, model, model_record):
     paper_sim = PaperSimulator()
     risk_mgr = RiskManager(db)
     
-    # Circuit breaker check
-    circuit_check = risk_mgr.check_circuit_breakers(current_vix=20.0)  # TODO: Get real VIX
+    # Circuit breaker check - use real VIX data
+    from app.ml.market_data import fetch_india_vix
+    current_vix = fetch_india_vix()
+    circuit_check = risk_mgr.check_circuit_breakers(current_vix=current_vix)
     if not circuit_check['safe']:
         logger.warning(f"Circuit breakers triggered: {circuit_check['reasons']}")
         return

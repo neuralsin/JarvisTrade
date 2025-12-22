@@ -203,13 +203,122 @@ def _train_lstm(df, model_name, hyperparams, task):
 
 
 def _train_transformer(df, model_name, hyperparams, task):
-    """Train Transformer model (placeholder for now)"""
+    """Train Transformer model with multi-head attention"""
     task.update_state(state='PROGRESS', meta={'status': 'Training Transformer', 'progress': 50})
     
-    # For now, use XGBoost as fallback
-    # Full transformer implementation would go here
-    logger.warning("Transformer not fully implemented, falling back to XGBoost")
-    return _train_xgboost(df, model_name, hyperparams, task)
+    from app.ml.transformer_model import TransformerPredictor
+    import numpy as np
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score
+    
+    logger.info("Starting Transformer model training")
+    
+    # Prepare data
+    feature_cols = [col for col in df.columns if col not in ['target', 'ts_utc']]
+    X = df[feature_cols].values
+    y = df['target'].values
+    
+    # Split data: 70% train, 15% val, 15% test
+    total_samples = len(df)
+    train_size = int(0.70 * total_samples)
+    val_size = int(0.15 * total_samples)
+    
+    X_train = X[:train_size]
+    y_train = y[:train_size]
+    X_val = X[train_size:train_size + val_size]
+    y_val = y[train_size:train_size + val_size]
+    X_test = X[train_size + val_size:]
+    y_test = y[train_size + val_size:]
+    
+    logger.info(f"Data split - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+    
+    # Get hyperparameters
+    seq_length = hyperparams.get('seq_length', 20)
+    d_model = hyperparams.get('d_model', 128)
+    num_heads = hyperparams.get('num_heads', 8)
+    num_layers = hyperparams.get('num_layers', 3)
+    dff = hyperparams.get('dff', 256)
+    epochs = hyperparams.get('n_estimators', 100)  # Reuse n_estimators
+    batch_size = hyperparams.get('batch_size', 32)
+    
+    # Initialize transformer
+    transformer = TransformerPredictor(
+        seq_length=seq_length,
+        features=len(feature_cols),
+        d_model=d_model,
+        num_heads=num_heads,
+        num_layers=num_layers,
+        dff=dff
+    )
+    
+    # Build model
+    transformer.build_model()
+    logger.info(f"Transformer model built with {transformer.model.count_params():,} parameters")
+    
+    # Prepare sequences
+    task.update_state(state='PROGRESS', meta={'status': 'Preparing sequences', 'progress': 60})
+    X_train_seq, y_train_seq = transformer.prepare_sequences(
+        pd.DataFrame(np.column_stack([X_train, y_train]), columns=feature_cols + ['target'])
+    )
+    X_val_seq, y_val_seq = transformer.prepare_sequences(
+        pd.DataFrame(np.column_stack([X_val, y_val]), columns=feature_cols + ['target'])
+    )
+    X_test_seq, y_test_seq = transformer.prepare_sequences(
+        pd.DataFrame(np.column_stack([X_test, y_test]), columns=feature_cols + ['target'])
+    )
+    
+    logger.info(f"Sequences prepared - Train: {X_train_seq.shape}, Val: {X_val_seq.shape}, Test: {X_test_seq.shape}")
+    
+    # Train model
+    task.update_state(state='PROGRESS', meta={'status': 'Training Transformer network', 'progress': 70})
+    history = transformer.train(
+        X_train_seq, y_train_seq,
+        X_val_seq, y_val_seq,
+        epochs=epochs,
+        batch_size=batch_size
+    )
+    
+    # Evaluate on test set
+    task.update_state(state='PROGRESS', meta={'status': 'Evaluating model', 'progress': 90})
+    y_pred_proba = transformer.predict(X_test_seq).flatten()
+    y_pred = (y_pred_proba > 0.3).astype(int)  # Use lower threshold like XGBoost
+    
+    # Calculate metrics
+    test_auc = roc_auc_score(y_test_seq, y_pred_proba)
+    test_acc = accuracy_score(y_test_seq, y_pred)
+    test_precision = precision_score(y_test_seq, y_pred, zero_division=0)
+    test_recall = recall_score(y_test_seq, y_pred, zero_division=0)
+    
+    val_loss = history.history['val_loss'][-1]
+    val_auc = history.history['val_auc'][-1]
+    
+    metrics = {
+        'train_auc': history.history['auc'][-1],
+        'val_auc': val_auc,
+        'test_auc': test_auc,
+        'test_accuracy': test_acc,
+        'test_precision': test_precision,
+        'test_recall': test_recall,
+        'val_loss': val_loss,
+        'epochs_trained': len(history.history['loss']),
+        'total_params': int(transformer.model.count_params())
+    }
+    
+    # Calculate class metrics
+    true_positives = int(((y_pred == 1) & (y_test_seq == 1)).sum())
+    false_positives = int(((y_pred == 1) & (y_test_seq == 0)).sum())
+    true_negatives = int(((y_pred == 0) & (y_test_seq == 0)).sum())
+    false_negatives = int(((y_pred == 0) & (y_test_seq == 1)).sum())
+    
+    logger.info(f"Transformer Test Metrics - AUC: {test_auc:.4f}, Accuracy: {test_acc:.4f}")
+    logger.info(f"TP: {true_positives}, FP: {false_positives}, TN: {true_negatives}, FN: {false_negatives}")
+    
+    # Save model
+    model_path = f"/app/models/{model_name}"
+    os.makedirs(model_path, exist_ok=True)
+    transformer.save_model(model_path)
+    
+    return metrics, model_path
 
 
 @celery_app.task(bind=True)

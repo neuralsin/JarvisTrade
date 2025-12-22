@@ -89,16 +89,13 @@ def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = 
     # Volume ratio
     df['volume_ratio'] = df['volume'] / df['volume'].rolling(20).mean()
     
-    # Nifty trend (if provided)
-    if nifty_ema200 is not None:
-        # This would typically be computed from Nifty data
-        # For now, placeholder
-        df['nifty_trend'] = 1  # TODO: Implement properly
-    else:
-        df['nifty_trend'] = 1
+    # Nifty trend - fetch real data
+    nifty_trend_value = fetch_nifty_trend()
+    df['nifty_trend'] = nifty_trend_value
     
-    # VIX
-    df['vix'] = vix if vix is not None else 20.0  # Default placeholder
+    # VIX - fetch real India VIX
+    vix_value = fetch_india_vix()
+    df['vix'] = vix_value
     
     # Sentiment features
     if instrument_id and db_session:

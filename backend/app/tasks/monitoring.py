@@ -46,20 +46,20 @@ def detect_model_drift(self):
         
         for col in feature_cols:
             if col in df_recent.columns:
-                # Compare with training distribution (placeholder - would need stored training data)
-                # For now, check against itself as example
-                sample1 = df_recent[col].dropna().values[:len(df_recent)//2]
-                sample2 = df_recent[col].dropna().values[len(df_recent)//2:]
+                # Get training distribution from model metadata
+                training_dist = compare_with_training_distribution(
+                    training_metrics, 
+                    col, 
+                    df_recent[col].dropna().values
+                )
                 
-                if len(sample1) > 30 and len(sample2) > 30:
-                    ks_stat, p_value = stats.ks_2samp(sample1, sample2)
-                    
-                    if p_value < 0.01:
-                        drift_features.append({
-                            'feature': col,
-                            'ks_stat': float(ks_stat),
-                            'p_value': float(p_value)
-                        })
+                if training_dist and training_dist['drift_detected']:
+                    drift_features.append({
+                        'feature': col,
+                        'ks_stat': float(training_dist['ks_stat']),
+                        'p_value': float(training_dist['p_value'])
+                    })
+
         
         # Spec 12: If >3 features show drift, trigger retrain
         if len(drift_features) >= 3:
@@ -80,3 +80,43 @@ def detect_model_drift(self):
     
     finally:
         db.close()
+
+
+def compare_with_training_distribution(training_metrics: dict, feature_name: str, production_data):
+    """
+    Compare production data distribution with training distribution
+    
+    Args:
+        training_metrics: Model metadata containing training distributions
+        feature_name: Name of feature to check
+        production_data: Recent production data for this feature
+    
+    Returns:
+        Dict with drift detection results
+    """
+    # Extract training distribution from metrics
+    training_dists = training_metrics.get('feature_distributions', {})
+    
+    if feature_name not in training_dists:
+        # No stored training data for this feature
+        return None
+    
+    training_data = training_dists[feature_name]
+    
+    if len(production_data) < 30:
+        # Not enough data for reliable test
+        return None
+    
+    # Perform KS test
+    ks_stat, p_value = stats.ks_2samp(training_data, production_data)
+    
+    # Drift detected if p-value < 0.01 (99% confidence)
+    drift_detected = p_value < 0.01
+    
+    return {
+        'drift_detected': drift_detected,
+        'ks_stat': ks_stat,
+        'p_value': p_value,
+        'feature': feature_name
+    }
+

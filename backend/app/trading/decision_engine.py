@@ -118,10 +118,15 @@ class DecisionEngine:
         if prob < self.prob_min:
             return {"action": "NO_TRADE", "reason": "PROB_BELOW_THRESHOLD", "prob": float(prob)}
         
-        # Market safety check (placeholder - implement based on feature_json)
-        market_safe = feature_json.get('nifty_trend', 1) == 1
-        if not market_safe:
-            return {"action": "NO_TRADE", "reason": "MARKET_UNSAFE", "prob": float(prob)}
+        
+        # Market safety check - comprehensive validation
+        market_safety = self._check_market_safety(feature_json)
+        if not market_safety['safe']:
+            return {
+                "action": "NO_TRADE", 
+                "reason": f"MARKET_UNSAFE: {market_safety['reason']}", 
+                "prob": float(prob)
+            }
         
         # Spec 6: Indicator checks
         rsi_14 = feature_json.get('rsi_14', 50)
@@ -168,3 +173,40 @@ class DecisionEngine:
             "order_params": order_params,
             "prob": float(prob)
         }
+    
+    def _check_market_safety(self, feature_json: Dict) -> Dict:
+        """
+        Comprehensive market safety checks
+        Returns: {'safe': bool, 'reason': str}
+        """
+        # 1. Check Nifty trend
+        nifty_trend = feature_json.get('nifty_trend', 1)
+        if nifty_trend != 1:
+            return {'safe': False, 'reason': 'Nifty trend bearish'}
+        
+        # 2. Check VIX (volatility index)
+        vix = feature_json.get('vix', 20.0)
+        VIX_MAX = 35.0  # Don't trade in extreme volatility
+        if vix > VIX_MAX:
+            return {'safe': False, 'reason': f'VIX too high ({vix:.1f} > {VIX_MAX})'}
+        
+        # 3. Check for opening gap (using returns)
+        returns_1 = feature_json.get('returns_1', 0)
+        GAP_THRESHOLD = 0.03  # 3% gap
+        if abs(returns_1) > GAP_THRESHOLD:
+            return {'safe': False, 'reason': f'Large gap detected ({returns_1*100:.1f}%)'}
+        
+        # 4. Check ATR volatility
+        atr_percent = feature_json.get('atr_percent', 0)
+        ATR_MAX = 0.05  # 5% max volatility
+        if atr_percent > ATR_MAX:
+            return {'safe': False, 'reason': f'ATR too high ({atr_percent*100:.1f}%)'}
+        
+        # 5. Check volume (avoid low liquidity)
+        volume_ratio = feature_json.get('volume_ratio', 1.0)
+        VOLUME_MIN = 0.5  # At least 50% of average volume
+        if volume_ratio < VOLUME_MIN:
+            return {'safe': False, 'reason': f'Low volume ({volume_ratio:.2f}x average)'}
+        
+        # All checks passed
+        return {'safe': True, 'reason': 'All safety checks passed'}
