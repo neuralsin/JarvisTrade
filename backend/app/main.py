@@ -42,7 +42,7 @@ async def health_check():
     }
 
 # Import and include routers
-from app.routers import auth, dashboard, trades, models, admin, settings as settings_router, buckets, backtest, options
+from app.routers import auth, dashboard, trades, models, admin, settings as settings_router, buckets, backtest, options, sentiment, instruments
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -53,6 +53,8 @@ app.include_router(settings_router.router, prefix="/api/v1/settings", tags=["set
 app.include_router(buckets.router, prefix="/api/v1/buckets", tags=["buckets"])
 app.include_router(backtest.router, prefix="/api/v1/backtest", tags=["backtesting"])
 app.include_router(options.router, prefix="/api/v1/options", tags=["options"])
+app.include_router(sentiment.router, prefix="/api/v1/sentiment", tags=["sentiment"])
+app.include_router(instruments.router, prefix="/api/v1/instruments", tags=["instruments"])
 
 @app.on_event("startup")
 async def startup_event():

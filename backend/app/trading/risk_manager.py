@@ -4,6 +4,7 @@ Spec 8: Risk manager with circuit breakers and safety features
 from sqlalchemy.orm import Session
 from app.db.models import SystemState
 from app.config import settings
+from typing import Dict
 import logging
 
 logger = logging.getLogger(__name__)

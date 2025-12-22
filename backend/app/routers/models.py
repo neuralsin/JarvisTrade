@@ -16,8 +16,11 @@ router = APIRouter()
 
 class TrainModelRequest(BaseModel):
     model_name: str
+    model_type: str = 'xgboost'  # xgboost, lstm, or transformer
     instrument_filter: Optional[str] = None
     hyperparams: Optional[Dict[str, Any]] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 @router.get("/")
@@ -81,21 +84,90 @@ async def trigger_training(
     Spec 5: Trigger model training task
     """
     from app.tasks.model_training import train_model
+    from app.celery_app import celery_app
+    from celery.result import AsyncResult
+    
+    # Validate model type
+    valid_types = ['xgboost', 'lstm', 'transformer']
+    if request.model_type not in valid_types:
+        return {"error": f"Invalid model_type. Must be one of: {valid_types}"}
+    
+    # Check if Celery worker is available
+    try:
+        inspect = celery_app.control.inspect()
+        active_workers = inspect.active()
+        if not active_workers:
+            logger.warning("No Celery workers available")
+            return {
+                "error": "Training service unavailable. Please ensure Celery worker is running.",
+                "details": "Run: docker-compose up -d celery_worker"
+            }
+    except Exception as e:
+        logger.error(f"Failed to check Celery worker status: {str(e)}")
+        # Continue anyway - the task will queue even if we can't check worker status
     
     # Queue training task
-    task = train_model.delay(
-        model_name=request.model_name,
-        instrument_filter=request.instrument_filter,
-        hyperparams=request.hyperparams or {}
-    )
+    try:
+        task = train_model.delay(
+            model_name=request.model_name,
+            model_type=request.model_type,
+            instrument_filter=request.instrument_filter,
+            hyperparams=request.hyperparams or {},
+            start_date=request.start_date,
+            end_date=request.end_date
+        )
+        
+        logger.info(f"Training task queued: {task.id} for model {request.model_name} (type: {request.model_type})")
+        
+        return {
+            "status": "queued",
+            "task_id": task.id,
+            "model_name": request.model_name,
+            "model_type": request.model_type
+        }
+    except Exception as e:
+        logger.error(f"Failed to queue training task: {str(e)}", exc_info=True)
+        return {
+            "error": f"Failed to queue training task: {str(e)}",
+            "details": "Check backend and Celery worker logs for more information"
+        }
+
+
+@router.get("/task/{task_id}")
+async def get_task_status(
+    task_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get training task status and progress
+    """
+    from app.celery_app import celery_app
+    from celery.result import AsyncResult
     
-    logger.info(f"Training task queued: {task.id} for model {request.model_name}")
+    result = AsyncResult(task_id, app=celery_app)
     
-    return {
-        "status": "queued",
-        "task_id": task.id,
-        "model_name": request.model_name
+    response = {
+        "task_id": task_id,
+        "status": result.state,
     }
+    
+    if result.state == 'PENDING':
+        response["progress"] = 0
+        response["message"] = "Task is waiting to start..."
+    elif result.state == 'PROGRESS':
+        info = result.info or {}
+        response["progress"] = info.get('progress', 0)
+        response["message"] = info.get('status', 'Training in progress...')
+    elif result.state == 'SUCCESS':
+        response["progress"] = 100
+        response["message"] = "Training completed successfully!"
+        response["result"] = result.result
+    elif result.state == 'FAILURE':
+        response["progress"] = 0
+        response["message"] = f"Training failed: {str(result.info)}"
+        response["error"] = str(result.info)
+    
+    return response
 
 
 @router.post("/{model_id}/activate")

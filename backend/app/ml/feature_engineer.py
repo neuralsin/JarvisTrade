@@ -38,7 +38,7 @@ def calculate_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int
     return atr
 
 
-def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = None) -> pd.DataFrame:
+def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = None, instrument_id: str = None, db_session=None) -> pd.DataFrame:
     """
     Spec 3: Compute all features for ML model
     
@@ -51,11 +51,14 @@ def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = 
     - volume_ratio
     - nifty_trend (requires external nifty_ema200)
     - vix (external)
+    - sentiment_1d, sentiment_3d, sentiment_7d (from news analysis)
     
     Args:
         df: DataFrame with columns [open, high, low, close, volume, ts_utc]
         nifty_ema200: current Nifty 200 EMA value (optional)
         vix: current VIX value (optional)
+        instrument_id: UUID of the instrument for sentiment lookup (optional)
+        db_session: Database session for sentiment lookup (optional)
     
     Returns:
         DataFrame with computed features
@@ -97,6 +100,40 @@ def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = 
     # VIX
     df['vix'] = vix if vix is not None else 20.0  # Default placeholder
     
+    # Sentiment features
+    if instrument_id and db_session:
+        try:
+            from app.db.models import NewsSentiment
+            from datetime import datetime, timedelta
+            
+            # Get latest sentiment data (within last 7 days)
+            cutoff_date = datetime.utcnow() - timedelta(days=7)
+            latest_sentiment = db_session.query(NewsSentiment).filter(
+                NewsSentiment.instrument_id == instrument_id,
+                NewsSentiment.ts_utc >= cutoff_date
+            ).order_by(NewsSentiment.ts_utc.desc()).first()
+            
+            if latest_sentiment:
+                df['sentiment_1d'] = float(latest_sentiment.sentiment_1d or 0.0)
+                df['sentiment_3d'] = float(latest_sentiment.sentiment_3d or 0.0)
+                df['sentiment_7d'] = float(latest_sentiment.sentiment_7d or 0.0)
+                logger.info(f"Added sentiment features from {latest_sentiment.ts_utc}")
+            else:
+                df['sentiment_1d'] = 0.0
+                df['sentiment_3d'] = 0.0
+                df['sentiment_7d'] = 0.0
+                logger.warning(f"No recent sentiment data found for instrument {instrument_id}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch sentiment features: {str(e)}, using defaults")
+            df['sentiment_1d'] = 0.0
+            df['sentiment_3d'] = 0.0
+            df['sentiment_7d'] = 0.0
+    else:
+        # Default values if no instrument_id or db_session provided
+        df['sentiment_1d'] = 0.0
+        df['sentiment_3d'] = 0.0
+        df['sentiment_7d'] = 0.0
+    
     # Round to 8 decimal places
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     df[numeric_cols] = df[numeric_cols].round(8)
@@ -114,7 +151,8 @@ def extract_feature_vector(row: pd.Series) -> Dict[str, float]:
     feature_cols = [
         'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
         'distance_from_ema200', 'rsi_14', 'rsi_slope',
-        'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix'
+        'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
+        'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
     ]
     
     features = {col: row.get(col, 0) for col in feature_cols}

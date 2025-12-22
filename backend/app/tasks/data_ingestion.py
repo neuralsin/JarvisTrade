@@ -8,7 +8,7 @@ from app.celery_app import celery_app
 from app.db.database import SessionLocal
 from app.db.models import Instrument, HistoricalCandle, User
 from app.utils.retry import retry_with_backoff
-from app.utils.crypto import decrypt_data
+from app.utils.crypto import decrypt_text
 from app.config import settings
 from datetime import datetime, timedelta
 import yfinance as yf
@@ -34,8 +34,10 @@ def get_kite_client():
         
         # Try to get a user with Kite credentials
         db = SessionLocal()
+        # Try to get a user with Kite credentials
+        db = SessionLocal()
         try:
-            user = db.query(User).filter(User.kite_access_token.isnot(None)).first()
+            user = db.query(User).filter(User.kite_access_token_encrypted.isnot(None)).first()
             
             if not user:
                 logger.info("No user with Kite access token, will use Yahoo Finance")
@@ -43,7 +45,7 @@ def get_kite_client():
             
             # Decrypt access token
             from kiteconnect import KiteConnect
-            access_token = decrypt_data(user.kite_access_token)
+            access_token = decrypt_text(user.kite_access_token_encrypted)
             
             kite = KiteConnect(api_key=settings.KITE_API_KEY)
             kite.set_access_token(access_token)
@@ -154,24 +156,16 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
         return None
 
 
-@celery_app.task(bind=True)
-def fetch_historical_data(
-    self,
+def ingest_historical_data(
     symbols: list,
     start_date: str,
     end_date: str,
     interval: str = '15m',
-    exchange: str = 'NSE'
+    exchange: str = 'NSE',
+    task_instance=None
 ):
     """
-    Smart historical data fetching with Kite API primary, Yahoo Finance fallback
-    
-    Args:
-        symbols: List of symbols (e.g., ['RELIANCE', 'TCS'])
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        interval: '15m', '1h', '1d'
-        exchange: 'NSE' or 'BSE'
+    Ingest historical data from Kite/Yahoo and save to DB
     """
     db = SessionLocal()
     
@@ -193,13 +187,16 @@ def fetch_historical_data(
         
         for symbol in symbols:
             try:
-                self.update_state(
-                    state='PROGRESS',
-                    meta={
-                        'status': f'Fetching {symbol}',
-                        'progress': (symbols.index(symbol) / len(symbols)) * 100
-                    }
-                )
+                if task_instance:
+                    task_instance.update_state(
+                        state='PROGRESS',
+                        meta={
+                            'status': f'Fetching {symbol}',
+                            'progress': (symbols.index(symbol) / len(symbols)) * 100
+                        }
+                    )
+                else:
+                    logger.info(f"Fetching {symbol} ({symbols.index(symbol)+1}/{len(symbols)})")
                 
                 df = None
                 source_used = None
@@ -243,6 +240,7 @@ def fetch_historical_data(
                 
                 # Insert candles
                 timeframe = interval
+                count = 0
                 for ts, row in df.iterrows():
                     ts_utc = pd.Timestamp(ts).tz_localize(None) if ts.tzinfo is None else pd.Timestamp(ts).tz_convert('UTC').tz_localize(None)
                     
@@ -264,10 +262,11 @@ def fetch_historical_data(
                             volume=float(row['Volume'])
                         )
                         db.add(candle)
-                        total_candles += 1
+                        count += 1
                 
                 db.commit()
-                logger.info(f"✓ {symbol}: {len(df)} candles from {source_used}")
+                total_candles += count
+                logger.info(f"✓ {symbol}: {count} new candles from {source_used}")
             
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {str(e)}")
@@ -287,6 +286,28 @@ def fetch_historical_data(
     
     finally:
         db.close()
+
+
+@celery_app.task(bind=True)
+def fetch_historical_data(
+    self,
+    symbols: list,
+    start_date: str,
+    end_date: str,
+    interval: str = '15m',
+    exchange: str = 'NSE'
+):
+    """
+    Smart historical data fetching with Kite API primary, Yahoo Finance fallback
+    
+    Args:
+        symbols: List of symbols (e.g., ['RELIANCE', 'TCS'])
+        start_date: Start date (YYYY-MM-DD)
+        end_date: End date (YYYY-MM-DD)
+        interval: '15m', '1h', '1d'
+        exchange: 'NSE' or 'BSE'
+    """
+    return ingest_historical_data(symbols, start_date, end_date, interval, exchange, task_instance=self)
 
 
 @celery_app.task(bind=True)

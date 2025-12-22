@@ -7,7 +7,7 @@ from app.db.database import SessionLocal
 from app.db.models import Instrument, HistoricalCandle, Feature, User
 from app.ml.feature_engineer import compute_features, extract_feature_vector
 from app.ml.labeler import generate_labels
-from app.tasks.data_ingestion import fetch_intraday_yf
+from app.tasks.data_ingestion import ingest_historical_data
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 import pandas as pd
@@ -79,7 +79,6 @@ def seed_instruments():
     finally:
         db.close()
 
-
 def fetch_historical_data(years: int = 2):
     """
     Fetch historical data for seeded instruments
@@ -88,15 +87,16 @@ def fetch_historical_data(years: int = 2):
     
     try:
         instruments = db.query(Instrument).all()
-        symbols = [f"{i.symbol}.NS" for i in instruments]
+        symbols = [i.symbol for i in instruments]  # ingest_historical_data handles exchange specifics
         
         end_date = datetime.utcnow().strftime('%Y-%m-%d')
-        start_date = (datetime.utcnow() - timedelta(days=365 * years)).strftime('%Y-%m-%d')
+        # Yahoo Finance limits 15m data to last 60 days
+        start_date = (datetime.utcnow() - timedelta(days=59)).strftime('%Y-%m-%d')
         
-        logger.info(f"Fetching {years} years of data for {len(symbols)} symbols")
+        logger.info(f"Fetching 59 days of 15m data for {len(symbols)} symbols (Yahoo limit)")
         
-        # Fetch intraday data
-        fetch_intraday_yf(symbols, start_date, end_date)
+        # Fetch intraday data using the extracted logic
+        ingest_historical_data(symbols, start_date, end_date, interval='15m', exchange='NSE')
         
         logger.info("Historical data fetch complete")
     finally:
@@ -143,6 +143,9 @@ def compute_and_store_features():
             
             # Generate labels
             df = generate_labels(df)
+            
+            # Drop rows with NaN values (e.g. from EWA/rolling calculations)
+            df.dropna(inplace=True)
             
             # Store features
             for _, row in df.iterrows():

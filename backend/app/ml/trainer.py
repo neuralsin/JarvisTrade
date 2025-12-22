@@ -38,14 +38,16 @@ class ModelTrainer:
             "random_state": 42
         }
     
-    def prepare_data(self, df: pd.DataFrame, train_end: str = "2022-12-31", 
-                     val_end: str = "2023-12-31") -> Tuple:
+    
+    def prepare_data(self, df: pd.DataFrame, train_end: str = None, 
+                     val_end: str = None) -> Tuple:
         """
-        Spec 5: Create train/val/test splits
-        train = 2015-2022, val = 2023, test = 2024+
+        Create train/val/test splits
+        If train_end/val_end not provided, uses 70%-15%-15% split automatically
         """
         df = df.copy()
         df['ts_utc'] = pd.to_datetime(df['ts_utc'])
+        df = df.sort_values('ts_utc').reset_index(drop=True)
         
         # Feature columns
         feature_cols = [
@@ -57,10 +59,29 @@ class ModelTrainer:
         # Remove rows with null targets
         df = df[df['target'].notna()].copy()
         
-        # Split by date
-        train_df = df[df['ts_utc'] <= train_end]
-        val_df = df[(df['ts_utc'] > train_end) & (df['ts_utc'] <= val_end)]
-        test_df = df[df['ts_utc'] > val_end]
+        if len(df) == 0:
+            raise ValueError("No data after filtering null targets")
+        
+        # Dynamic date-based splits if not provided
+        if train_end is None or val_end is None:
+            # Use 70% train, 15% val, 15% test
+            n = len(df)
+            train_idx = int(n * 0.70)
+            val_idx = int(n * 0.85)
+            
+            train_df = df.iloc[:train_idx]
+            val_df = df.iloc[train_idx:val_idx]
+            test_df = df.iloc[val_idx:]
+            
+            logger.info(f"Using automatic 70-15-15 split")
+            logger.info(f"Date ranges: Train={train_df['ts_utc'].min()} to {train_df['ts_utc'].max()}, "
+                       f"Val={val_df['ts_utc'].min()} to {val_df['ts_utc'].max()}, "
+                       f"Test={test_df['ts_utc'].min()} to {test_df['ts_utc'].max()}")
+        else:
+            # Use provided dates
+            train_df = df[df['ts_utc'] <= train_end]
+            val_df = df[(df['ts_utc'] > train_end) & (df['ts_utc'] <= val_end)]
+            test_df = df[df['ts_utc'] > val_end]
         
         X_train = train_df[feature_cols].fillna(0)
         y_train = train_df['target'].astype(int)
@@ -73,12 +94,27 @@ class ModelTrainer:
         
         logger.info(f"Data splits - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
         
+        if len(X_train) == 0:
+            raise ValueError(f"Empty training set! Check date range or data availability.")
+        if len(X_val) == 0:
+            logger.warning("Empty validation set - will use train set for early stopping")
+        
         return X_train, y_train, X_val, y_val, X_test, y_test, feature_cols
     
     def train(self, X_train, y_train, X_val, y_val):
         """
-        Train XGBoost model with early stopping
+        Train XGBoost model with early stopping and class weight handling
         """
+        # Calculate scale_pos_weight to handle class imbalance
+        neg_count = (y_train == 0).sum()
+        pos_count = (y_train == 1).sum()
+        
+        if pos_count > 0:
+            scale_pos_weight = neg_count / pos_count
+            logger.info(f"Class imbalance detected: {neg_count} negative, {pos_count} positive samples")
+            logger.info(f"Using scale_pos_weight={scale_pos_weight:.2f} to balance classes")
+            self.hyperparams['scale_pos_weight'] = scale_pos_weight
+        
         model = XGBClassifier(**self.hyperparams)
         
         model.fit(
@@ -94,9 +130,11 @@ class ModelTrainer:
     def evaluate(self, model, X, y, feature_cols) -> Dict:
         """
         Spec 5: Compute metrics including AUC, precision@k, F1, SHAP
+        Updated to use 0.3 cutoff for predictions instead of 0.5
         """
         y_pred_proba = model.predict_proba(X)[:, 1]
-        y_pred = model.predict(X)
+        # Use 0.3 threshold instead of 0.5 to generate more trading signals
+        y_pred = (y_pred_proba >= 0.3).astype(int)
         
         # Basic metrics
         auc = roc_auc_score(y, y_pred_proba)

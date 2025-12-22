@@ -12,7 +12,6 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 axios.defaults.baseURL = API_BASE_URL;
 
-// Components (will be imported from separate files)
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import PaperTrading from './pages/PaperTrading';
@@ -21,6 +20,8 @@ import Models from './pages/Models';
 import Trades from './pages/Trades';
 import Settings from './pages/Settings';
 import Portfolio from './pages/Portfolio';
+import Help from './pages/Help';
+import ManageStocks from './pages/ManageStocks';
 import Layout from './components/Layout';
 
 function App() {
@@ -109,6 +110,8 @@ function App() {
                         <Route path="live-trading" element={<LiveTrading />} />
                         <Route path="models" element={<Models />} />
                         <Route path="trades" element={<Trades />} />
+                        <Route path="stocks" element={<ManageStocks />} />
+                        <Route path="help" element={<Help />} />
                         <Route path="settings" element={<Settings />} />
                     </Route>
                 </Routes>

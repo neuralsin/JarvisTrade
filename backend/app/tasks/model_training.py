@@ -42,7 +42,7 @@ def train_model(
     
     try:
         logger.info(f"Starting {model_type} model training: {model_name} (task: {task_id})")
-        self.update_state(state='PROGRESS', meta={'status': 'Loading data', 'progress': 10})
+        self.update_state(state='PROGRESS', meta={'status': 'Initializing training pipeline...', 'progress': 5})
         
         # Set default date range if not provided
         if not end_date:
@@ -50,6 +50,8 @@ def train_model(
         if not start_date:
             start_dt = datetime.utcnow() - timedelta(days=730)  # 2 years default
             start_date = start_dt.strftime('%Y-%m-%d')
+        
+        self.update_state(state='PROGRESS', meta={'status': f'Loading data from {start_date} to {end_date}...', 'progress': 10})
         
         # Load feature data with date filtering
         query = db.query(Feature).join(Instrument)
@@ -66,8 +68,21 @@ def train_model(
         features_data = query.all()
         
         if not features_data:
-            logger.error("No feature data found")
-            return {"status": "error", "message": "No training data available"}
+            # Check if there's any data at all
+            total_features = db.query(Feature).count()
+            total_instruments = db.query(Instrument).count()
+            
+            error_msg = f"No training data found for the specified criteria."
+            if instrument_filter:
+                error_msg += f" Filter: {instrument_filter}."
+            error_msg += f" Date range: {start_date} to {end_date}."
+            error_msg += f" Total features in DB: {total_features}, Total instruments: {total_instruments}."
+            
+            if total_features == 0:
+                error_msg += " You may need to run data ingestion first."
+            
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
         # Convert to DataFrame
         df_rows = []
@@ -80,7 +95,7 @@ def train_model(
         df = pd.DataFrame(df_rows)
         
         logger.info(f"Loaded {len(df)} feature rows from {start_date} to {end_date}")
-        self.update_state(state='PROGRESS', meta={'status': 'Preparing data', 'progress': 30})
+        self.update_state(state='PROGRESS', meta={'status': f'Preparing {len(df)} samples for {model_type} training...', 'progress': 25})
         
         # Train based on model type
         if model_type == 'lstm':
@@ -124,18 +139,18 @@ def train_model(
 
 def _train_xgboost(df, model_name, hyperparams, task):
     """Train XGBoost model"""
-    task.update_state(state='PROGRESS', meta={'status': 'Training XGBoost', 'progress': 50})
+    task.update_state(state='PROGRESS', meta={'status': 'Splitting data into train/validation/test sets...', 'progress': 35})
     
     trainer = ModelTrainer(hyperparams=hyperparams)
     X_train, y_train, X_val, y_val, X_test, y_test, feature_cols = trainer.prepare_data(df)
     
-    task.update_state(state='PROGRESS', meta={'status': 'Fitting model', 'progress': 60})
+    task.update_state(state='PROGRESS', meta={'status': f'Training XGBoost on {len(X_train)} samples...', 'progress': 50})
     model = trainer.train(X_train, y_train, X_val, y_val)
     
-    task.update_state(state='PROGRESS', meta={'status': 'Evaluating', 'progress': 80})
+    task.update_state(state='PROGRESS', meta={'status': 'Evaluating model performance...', 'progress': 75})
     metrics = trainer.evaluate(model, X_test, y_test, feature_cols)
     
-    task.update_state(state='PROGRESS', meta={'status': 'Saving', 'progress': 90})
+    task.update_state(state='PROGRESS', meta={'status': 'Saving model to disk...', 'progress': 90})
     model_path = trainer.save_model(model, model_name, metrics)
     
     return metrics, model_path
@@ -145,12 +160,12 @@ def _train_lstm(df, model_name, hyperparams, task):
     """Train LSTM model"""
     import os
     
-    task.update_state(state='PROGRESS', meta={'status': 'Training LSTM', 'progress': 50})
+    task.update_state(state='PROGRESS', meta={'status': 'Initializing LSTM neural network...', 'progress': 35})
     
     lstm = LSTMPredictor()
     
     # Prepare sequences
-    task.update_state(state='PROGRESS', meta={'status': 'Preparing sequences', 'progress': 55})
+    task.update_state(state='PROGRESS', meta={'status': 'Creating time-series sequences...', 'progress': 45})
     X, y = lstm.prepare_sequences(df)
     
     # Split data
@@ -162,11 +177,11 @@ def _train_lstm(df, model_name, hyperparams, task):
     X_test, y_test = X[train_size+val_size:], y[train_size+val_size:]
     
     # Train
-    task.update_state(state='PROGRESS', meta={'status': 'Training neural network', 'progress': 60})
+    task.update_state(state='PROGRESS', meta={'status': f'Training LSTM neural network (50 epochs)...', 'progress': 55})
     history = lstm.train(X_train, y_train, X_val, y_val, epochs=50)
     
     # Evaluate
-    task.update_state(state='PROGRESS', meta={'status': 'Evaluating', 'progress': 85})
+    task.update_state(state='PROGRESS', meta={'status': 'Evaluating LSTM performance...', 'progress': 80})
     y_pred = lstm.predict(X_test)
     
     from sklearn.metrics import roc_auc_score, accuracy_score
@@ -179,7 +194,7 @@ def _train_lstm(df, model_name, hyperparams, task):
     }
     
     # Save
-    task.update_state(state='PROGRESS', meta={'status': 'Saving', 'progress': 95})
+    task.update_state(state='PROGRESS', meta={'status': 'Saving LSTM model...', 'progress': 92})
     model_path = f"models/{model_name}"
     os.makedirs(model_path, exist_ok=True)
     lstm.save_model(model_path)

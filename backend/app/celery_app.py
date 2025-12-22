@@ -28,6 +28,10 @@ celery_app.conf.update(
 # Auto-discover tasks
 celery_app.autodiscover_tasks(['app.tasks'])
 
+# Explicitly import tasks to ensure registration
+# This must happen after celery_app is created
+import app.tasks  # noqa: E402, F401
+
 # Spec 12: Scheduled tasks
 celery_app.conf.beat_schedule = {
     'fetch-eod-daily': {
@@ -35,7 +39,7 @@ celery_app.conf.beat_schedule = {
         'schedule': crontab(hour=18, minute=0),  # 6 PM UTC daily
     },
     'fetch-intraday-15min': {
-        'task': 'app.tasks.data_ingestion.fetch_recent_intraday',
+        'task': 'app.tasks.data_ingestion.fetch_recent_data',
         'schedule': crontab(minute='*/15'),  # Every 15 minutes
     },
     'check-signals': {

@@ -11,6 +11,8 @@ export default function Layout() {
         { path: '/live-trading', label: 'Live Trading', icon: '⚡' },
         { path: '/models', label: 'Models', icon: '🤖' },
         { path: '/trades', label: 'Trades', icon: '💹' },
+        { path: '/stocks', label: 'Manage Stocks', icon: '📈' },
+        { path: '/help', label: 'Help', icon: '📚' },
         { path: '/settings', label: 'Settings', icon: '⚙️' },
     ];
 

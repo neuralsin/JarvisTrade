@@ -40,6 +40,7 @@ class Instrument(Base):
     candles = relationship("HistoricalCandle", back_populates="instrument")
     features = relationship("Feature", back_populates="instrument")
     trades = relationship("Trade", back_populates="instrument")
+    sentiments = relationship("NewsSentiment", back_populates="instrument")
 
 
 class HistoricalCandle(Base):
@@ -164,3 +165,22 @@ class EquitySnapshot(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="equity_snapshots")
+
+
+class NewsSentiment(Base):
+    __tablename__ = "news_sentiment"
+    __table_args__ = (
+        Index('idx_sentiment_instrument_time', 'instrument_id', 'ts_utc'),
+    )
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    instrument_id = Column(UUID(as_uuid=True), ForeignKey('instruments.id', ondelete='CASCADE'))
+    ts_utc = Column(DateTime(timezone=True), nullable=False)
+    sentiment_1d = Column(Float)
+    sentiment_3d = Column(Float)
+    sentiment_7d = Column(Float)
+    news_count = Column(Integer)
+    source = Column(Text, default='newsapi')
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    instrument = relationship("Instrument", back_populates="sentiments")

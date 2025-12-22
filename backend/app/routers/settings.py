@@ -10,9 +10,22 @@ from app.routers.auth import get_current_user
 from app.config import settings
 from passlib.context import CryptContext
 import logging
+import hashlib
+import base64
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _prepare_password(password: str) -> str:
+    """
+    Pre-hash password with SHA256 and encode as base64 before bcrypt.
+    This avoids bcrypt's 72-byte limitation while maintaining security.
+    The base64 encoded SHA256 hash is 44 characters, well within the 72-byte limit.
+    """
+    password_hash = hashlib.sha256(password.encode('utf-8')).digest()
+    return base64.b64encode(password_hash).decode('ascii')
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -78,7 +91,7 @@ async def update_trading_parameters(
     Update trading parameters (requires password confirmation)
     """
     # Verify password
-    if not pwd_context.verify(request.password, current_user.password_hash):
+    if not pwd_context.verify(_prepare_password(request.password), current_user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect password")
     
     # Validate parameters
@@ -129,7 +142,7 @@ async def reset_to_defaults(
     Reset parameters to system defaults
     """
     # Verify password
-    if not pwd_context.verify(password, current_user.password_hash):
+    if not pwd_context.verify(_prepare_password(password), current_user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect password")
     
     param_key = f"trading_params_{mode}_{current_user.id}"

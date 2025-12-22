@@ -115,12 +115,27 @@ CREATE TABLE IF NOT EXISTS equity_snapshots (
   UNIQUE(user_id, mode, ts_utc)
 );
 
+-- News sentiment data
+CREATE TABLE IF NOT EXISTS news_sentiment (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  instrument_id uuid REFERENCES instruments(id) ON DELETE CASCADE,
+  ts_utc timestamptz NOT NULL,
+  sentiment_1d numeric,
+  sentiment_3d numeric,
+  sentiment_7d numeric,
+  news_count integer,
+  source text DEFAULT 'newsapi',
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(instrument_id, ts_utc, source)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_candles_instrument_time ON historical_candles(instrument_id, timeframe, ts_utc DESC);
 CREATE INDEX IF NOT EXISTS idx_features_instrument_time ON features(instrument_id, ts_utc DESC);
 CREATE INDEX IF NOT EXISTS idx_trades_user_mode ON trades(user_id, mode, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status) WHERE status = 'open';
 CREATE INDEX IF NOT EXISTS idx_equity_snapshots_user ON equity_snapshots(user_id, mode, ts_utc DESC);
+CREATE INDEX IF NOT EXISTS idx_sentiment_instrument_time ON news_sentiment(instrument_id, ts_utc DESC);
 
 -- Insert default system state
 INSERT INTO system_state (key, value) VALUES 

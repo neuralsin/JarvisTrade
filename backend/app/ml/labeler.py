@@ -9,18 +9,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def generate_labels(df: pd.DataFrame, target_pct: float = 0.012, stop_pct: float = 0.006, window: int = 10) -> pd.DataFrame:
+def generate_labels(df: pd.DataFrame, target_pct: float = 0.008, stop_pct: float = 0.004, window: int = 20) -> pd.DataFrame:
     """
     Spec 4: For each row t, compute target label:
-    - target=1 if future_high >= close * 1.012 AND min_low before target >= close * 0.994
+    - target=1 if future_high >= close * 1.008 AND min_low before target >= close * 0.996
     - target=0 otherwise
     - target=NULL if insufficient future candles
     
+    UPDATED: Reduced target to 0.8% and stop to 0.4%, increased window to 20
+    for better balance between positive and negative samples
+    
     Args:
         df: DataFrame with close, high, low columns
-        target_pct: Target percentage gain (default 1.2%)
-        stop_pct: Stop loss percentage (default 0.6%)
-        window: Forward-looking window (default 10 candles)
+        target_pct: Target percentage gain (default 0.8%)
+        stop_pct: Stop loss percentage (default 0.4%)
+        window: Forward-looking window (default 20 candles)
     
     Returns:
         DataFrame with 'target' column added
@@ -66,6 +69,14 @@ def generate_labels(df: pd.DataFrame, target_pct: float = 0.012, stop_pct: float
     # Spec 4: Exclude rows with NULL target from training
     valid_count = df['target'].notna().sum()
     total_count = len(df)
-    logger.info(f"Generated labels: {valid_count}/{total_count} valid ({valid_count/total_count*100:.1f}%)")
+    positive_count = (df['target'] == 1).sum()
+    negative_count = (df['target'] == 0).sum()
+    
+    if positive_count > 0:
+        pos_ratio = positive_count / valid_count * 100
+        logger.info(f"Generated labels: {valid_count}/{total_count} valid ({valid_count/total_count*100:.1f}%)")
+        logger.info(f"Class distribution: {positive_count} positive ({pos_ratio:.1f}%), {negative_count} negative ({100-pos_ratio:.1f}%)")
+    else:
+        logger.warning(f"Generated {valid_count} labels but NO POSITIVE samples! Consider relaxing target_pct or increasing window.")
     
     return df

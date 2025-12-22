@@ -47,16 +47,50 @@ def fetch_and_analyze_news(self):
                 
                 sentiment_data = analyzer.process_symbol_news(instrument.symbol, news_api_key)
                 
-                # Store sentiment data (could be added to a new table or cached)
+                # Store sentiment data in database
+                from app.db.models import NewsSentiment
+                from datetime import datetime
+                
+                ts_utc = datetime.utcnow()
+                
+                # Check if sentiment already exists for this timestamp
+                existing = db.query(NewsSentiment).filter(
+                    NewsSentiment.instrument_id == instrument.id,
+                    NewsSentiment.ts_utc >= ts_utc.replace(hour=0, minute=0, second=0),
+                    NewsSentiment.source == 'newsapi'
+                ).first()
+                
+                if existing:
+                    # Update existing record
+                    existing.sentiment_1d = sentiment_data['sentiment_1d']
+                    existing.sentiment_3d = sentiment_data['sentiment_3d']
+                    existing.sentiment_7d = sentiment_data['sentiment_7d']
+                    existing.news_count = sentiment_data['news_count']
+                else:
+                    # Create new record
+                    sentiment_record = NewsSentiment(
+                        instrument_id=instrument.id,
+                        ts_utc=ts_utc,
+                        sentiment_1d=sentiment_data['sentiment_1d'],
+                        sentiment_3d=sentiment_data['sentiment_3d'],
+                        sentiment_7d=sentiment_data['sentiment_7d'],
+                        news_count=sentiment_data['news_count'],
+                        source='newsapi'
+                    )
+                    db.add(sentiment_record)
+                
+                db.commit()
+                
                 results.append({
                     'symbol': instrument.symbol,
                     'sentiment': sentiment_data
                 })
                 
-                logger.info(f"News sentiment for {instrument.symbol}: {sentiment_data['sentiment_7d']:.3f}")
+                logger.info(f"News sentiment for {instrument.symbol}: {sentiment_data['sentiment_7d']:.3f} (saved to DB)")
             
             except Exception as e:
                 logger.error(f"Failed to analyze {instrument.symbol}: {str(e)}")
+                db.rollback()
                 continue
         
         logger.info(f"News sentiment analysis complete for {len(results)} symbols")

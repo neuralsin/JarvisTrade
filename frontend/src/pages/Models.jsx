@@ -1,19 +1,15 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import TrainingWizard from '../components/TrainingWizard';
+import TrainingProgress from '../components/TrainingProgress';
 
 export default function Models() {
     const [models, setModels] = useState([]);
     const [selectedModel, setSelectedModel] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [showTrainModal, setShowTrainModal] = useState(false);
-    const [trainParams, setTrainParams] = useState({
-        model_name: '',
-        model_type: 'xgboost',
-        instrument_filter: '',
-        start_date: new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 2 years ago
-        end_date: new Date().toISOString().split('T')[0] // today
-    });
+    const [showWizard, setShowWizard] = useState(false);
+    const [trainingTaskId, setTrainingTaskId] = useState(null);
 
     useEffect(() => {
         fetchModels();
@@ -49,18 +45,26 @@ export default function Models() {
         }
     };
 
-    const startTraining = async () => {
+    const handleWizardSubmit = async (formData) => {
         try {
-            const response = await axios.post('/api/v1/models/train', trainParams);
-            alert(`Training started: ${response.data.task_id}`);
-            setShowTrainModal(false);
-            setTrainParams({ model_name: '', instrument_filter: '' });
-
-            // Refresh models list after a delay
-            setTimeout(fetchModels, 2000);
+            const response = await axios.post('/api/v1/models/train', formData);
+            setTrainingTaskId(response.data.task_id);
+            setShowWizard(false);
+            alert(`Training started! Task ID: ${response.data.task_id}`);
         } catch (error) {
-            alert('Failed to start training');
+            alert(`Failed to start training: ${error.response?.data?.error || error.message}`);
         }
+    };
+
+    const handleTrainingComplete = (result) => {
+        alert(`Training completed! Model: ${result.model_name}`);
+        setTrainingTaskId(null);
+        fetchModels();
+    };
+
+    const handleTrainingError = (error) => {
+        alert('Training failed. Check console for details.');
+        setTrainingTaskId(null);
     };
 
     if (loading) {
@@ -71,10 +75,21 @@ export default function Models() {
         <div className="fade-in">
             <div className="flex justify-between items-center mb-lg">
                 <h1>ML Models</h1>
-                <button className="btn btn-primary" onClick={() => setShowTrainModal(true)}>
+                <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
                     ➕ Train New Model
                 </button>
             </div>
+
+            {/* Training Progress */}
+            {trainingTaskId && (
+                <div className="mb-lg">
+                    <TrainingProgress
+                        taskId={trainingTaskId}
+                        onComplete={handleTrainingComplete}
+                        onError={handleTrainingError}
+                    />
+                </div>
+            )}
 
             <div className="grid grid-cols-3 gap-lg">
                 {/* Models List */}
@@ -180,48 +195,12 @@ export default function Models() {
                 </div>
             </div>
 
-            {/* Train Modal */}
-            {showTrainModal && (
-                <div className="modal-overlay" onClick={() => setShowTrainModal(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="mb-lg">Train New Model</h3>
-
-                        <div className="form-group">
-                            <label className="form-label">Model Name</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={trainParams.model_name}
-                                onChange={(e) => setTrainParams({ ...trainParams, model_name: e.target.value })}
-                                placeholder="e.g., xgb_v1"
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Instrument Filter (Optional)</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={trainParams.instrument_filter}
-                                onChange={(e) => setTrainParams({ ...trainParams, instrument_filter: e.target.value })}
-                                placeholder="e.g., RELIANCE (leave blank for all)"
-                            />
-                        </div>
-
-                        <div className="flex gap-md" style={{ justifyContent: 'flex-end' }}>
-                            <button className="btn btn-outline" onClick={() => setShowTrainModal(false)}>
-                                Cancel
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={startTraining}
-                                disabled={!trainParams.model_name}
-                            >
-                                Start Training
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {/* Training Wizard */}
+            {showWizard && (
+                <TrainingWizard
+                    onSubmit={handleWizardSubmit}
+                    onCancel={() => setShowWizard(false)}
+                />
             )}
         </div>
     );
