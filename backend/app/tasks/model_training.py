@@ -12,6 +12,7 @@ from sqlalchemy import text
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
+import os  # CRITICAL: needed for model saving
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +45,29 @@ def train_model(
         logger.info(f"Starting {model_type} model training: {model_name} (task: {task_id})")
         self.update_state(state='PROGRESS', meta={'status': 'Initializing training pipeline...', 'progress': 5})
         
-        # Set default date range if not provided
-        if not end_date:
-            end_date = datetime.utcnow().strftime('%Y-%m-%d')
-        if not start_date:
-            start_dt = datetime.utcnow() - timedelta(days=730)  # 2 years default
-            start_date = start_dt.strftime('%Y-%m-%d')
+        # Set default date range based on actual data in DB
+        if not end_date or not start_date:
+            from sqlalchemy import func
+            # Query actual date range from features table  
+            date_range = db.query(
+                func.min(Feature.ts_utc).label('min_date'),
+                func.max(Feature.ts_utc).label('max_date')
+            ).first()
+            
+            if date_range and date_range.min_date and date_range.max_date:
+                if not start_date:
+                    start_date = date_range.min_date.strftime('%Y-%m-%d')
+                if not end_date:
+                    end_date = date_range.max_date.strftime('%Y-%m-%d')
+                logger.info(f"Using actual DB date range: {start_date} to {end_date}")
+            else:
+                # Fallback if no features exist
+                if not end_date:
+                    end_date = datetime.utcnow().strftime('%Y-%m-%d')
+                if not start_date:
+                    start_dt = datetime.utcnow() - timedelta(days=730)
+                    start_date = start_dt.strftime('%Y-%m-%d')
+                logger.warning(f"No features in DB, using fallback dates: {start_date} to {end_date}")
         
         self.update_state(state='PROGRESS', meta={'status': f'Loading data from {start_date} to {end_date}...', 'progress': 10})
         
@@ -95,6 +113,38 @@ def train_model(
         df = pd.DataFrame(df_rows)
         
         logger.info(f"Loaded {len(df)} feature rows from {start_date} to {end_date}")
+        
+        # CRITICAL VALIDATION: Ensure we have enough data for training
+        MIN_SAMPLES = 100  # Minimum samples needed for reliable training
+        if len(df) < MIN_SAMPLES:
+            error_msg = f"Insufficient training data: {len(df)} samples (need at least {MIN_SAMPLES}). "
+            if instrument_filter:
+                error_msg += f"Try training without instrument filter or expanding date range."
+            else:
+                error_msg += f"Please ingest more historical data."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Validate target distribution
+        if 'target' not in df.columns:
+            raise ValueError("No 'target' column found in features. Check labeling logic.")
+        
+        target_dist = df['target'].value_counts()
+        if len(target_dist) < 2:
+            raise ValueError(f"Target has only one class ({target_dist.index[0]}). Cannot train. Need both buy/sell signals.")
+        
+        # Check for reasonable class balance (warn if too imbalanced)
+        pos_ratio = (df['target'] == 1).sum() / len(df)
+        if pos_ratio < 0.01 or pos_ratio > 0.99:
+            logger.warning(f"Severe class imbalance: {pos_ratio*100:.1f}% positive samples. Training may be poor.")
+        
+        # Validate essential features exist
+        essential_features = ['rsi_14', 'atr_percent', 'volume_ratio']
+        missing_features = [f for f in essential_features if f not in df.columns]
+        if missing_features:
+            logger.warning(f"Missing expected features: {missing_features}. Feature engineering may be incomplete.")
+        
+        logger.info(f"✓ Validation passed: {len(df)} samples, {pos_ratio*100:.1f}% positive class")
         self.update_state(state='PROGRESS', meta={'status': f'Preparing {len(df)} samples for {model_type} training...', 'progress': 25})
         
         # Train based on model type
@@ -185,12 +235,21 @@ def _train_lstm(df, model_name, hyperparams, task):
     y_pred = lstm.predict(X_test)
     
     from sklearn.metrics import roc_auc_score, accuracy_score
+    
+    # Store training distributions for drift detection
+    feature_distributions = {}
+    feature_cols = [col for col in df.columns if col not in ['target', 'ts_utc']]
+    for col in feature_cols[:10]:  # First 10 features
+        if col in df.columns:
+            feature_distributions[col] = df[col].dropna().values.tolist()[:1000]
+    
     metrics = {
         'auc_roc': float(roc_auc_score(y_test, y_pred)),
         'accuracy': float(accuracy_score(y_test, (y_pred > 0.5).astype(int))),
         'samples_train': len(X_train),
         'samples_val': len(X_val),
-        'samples_test': len(X_test)
+        'samples_test': len(X_test),
+        'feature_distributions': feature_distributions
     }
     
     # Save
@@ -292,6 +351,13 @@ def _train_transformer(df, model_name, hyperparams, task):
     val_loss = history.history['val_loss'][-1]
     val_auc = history.history['val_auc'][-1]
     
+    # Store training distributions for drift detection
+    feature_distributions = {}
+    feature_cols = [col for col in df.columns if col not in ['target', 'ts_utc']]
+    for col in feature_cols[:10]:  # First 10 features
+        if col in df.columns:
+            feature_distributions[col] = df[col].dropna().values.tolist()[:1000]
+    
     metrics = {
         'train_auc': history.history['auc'][-1],
         'val_auc': val_auc,
@@ -301,7 +367,8 @@ def _train_transformer(df, model_name, hyperparams, task):
         'test_recall': test_recall,
         'val_loss': val_loss,
         'epochs_trained': len(history.history['loss']),
-        'total_params': int(transformer.model.count_params())
+        'total_params': int(transformer.model.count_params()),
+        'feature_distributions': feature_distributions
     }
     
     # Calculate class metrics

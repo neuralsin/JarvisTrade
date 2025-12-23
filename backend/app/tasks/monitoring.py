@@ -84,39 +84,77 @@ def detect_model_drift(self):
 
 def compare_with_training_distribution(training_metrics: dict, feature_name: str, production_data):
     """
-    Compare production data distribution with training distribution
+    Compare production data distribution with training distribution using KS test
     
     Args:
         training_metrics: Model metadata containing training distributions
         feature_name: Name of feature to check
-        production_data: Recent production data for this feature
+        production_data: Recent production data for this feature (numpy array or list)
     
     Returns:
-        Dict with drift detection results
+        Dict with drift detection results or None if validation fails
+        {
+            'drift_detected': bool,
+            'ks_stat': float,
+            'p_value': float,
+            'feature': str
+        }
+    
+    Raises:
+        None - Returns None on any error
     """
-    # Extract training distribution from metrics
-    training_dists = training_metrics.get('feature_distributions', {})
+    try:
+        # Validate inputs
+        if not isinstance(training_metrics, dict):
+            logger.warning(f"Invalid training_metrics type: {type(training_metrics)}")
+            return None
+        
+        if not isinstance(feature_name, str):
+            logger.warning(f"Invalid feature_name type: {type(feature_name)}")
+            return None
+        
+        # Extract training distribution from metrics
+        training_dists = training_metrics.get('feature_distributions', {})
+        
+        if not training_dists:
+            logger.debug(f"No training distributions stored in model metadata")
+            return None
+        
+        if feature_name not in training_dists:
+            logger.debug(f"No stored training data for feature: {feature_name}")
+            return None
+        
+        training_data = training_dists[feature_name]
+        
+        # Validate training data
+        if not training_data or len(training_data) < 30:
+            logger.warning(f"Insufficient training data for {feature_name}: {len(training_data) if training_data else 0} samples")
+            return None
+        
+        # Validate production data
+        if production_data is None or len(production_data) < 30:
+            logger.debug(f"Insufficient production data for {feature_name}: {len(production_data) if production_data is not None else 0} samples")
+            return None
+        
+        # Perform KS test
+        ks_stat, p_value = stats.ks_2samp(training_data, production_data)
+        
+        # Drift detected if p-value < 0.01 (99% confidence)
+        drift_detected = p_value < 0.01
+        
+        if drift_detected:
+            logger.info(f"Drift detected in {feature_name}: KS={ks_stat:.4f}, p={p_value:.4f}")
+        else:
+            logger.debug(f"No drift in {feature_name}: KS={ks_stat:.4f}, p={p_value:.4f}")
+        
+        return {
+            'drift_detected': drift_detected,
+            'ks_stat': ks_stat,
+            'p_value': p_value,
+            'feature': feature_name
+        }
     
-    if feature_name not in training_dists:
-        # No stored training data for this feature
+    except Exception as e:
+        logger.error(f"Error in drift detection for {feature_name}: {str(e)}")
         return None
-    
-    training_data = training_dists[feature_name]
-    
-    if len(production_data) < 30:
-        # Not enough data for reliable test
-        return None
-    
-    # Perform KS test
-    ks_stat, p_value = stats.ks_2samp(training_data, production_data)
-    
-    # Drift detected if p-value < 0.01 (99% confidence)
-    drift_detected = p_value < 0.01
-    
-    return {
-        'drift_detected': drift_detected,
-        'ks_stat': ks_stat,
-        'p_value': p_value,
-        'feature': feature_name
-    }
 

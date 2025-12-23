@@ -176,9 +176,22 @@ class DecisionEngine:
     
     def _check_market_safety(self, feature_json: Dict) -> Dict:
         """
-        Comprehensive market safety checks
-        Returns: {'safe': bool, 'reason': str}
+        Comprehensive market safety checks with validation
+        
+        Args:
+            feature_json: Dictionary containing feature values
+        
+        Returns:
+            Dict with 'safe' (bool) and 'reason' (str)
+        
+        Raises:
+            None - Always returns a dict, handles all errors gracefully
         """
+        # Validate input
+        if not isinstance(feature_json, dict):
+            logger.error(f"Invalid feature_json type: {type(feature_json)}")
+            return {'safe': False, 'reason': 'Invalid feature data'}
+        
         # 1. Check Nifty trend
         nifty_trend = feature_json.get('nifty_trend', 1)
         if nifty_trend != 1:
@@ -186,6 +199,10 @@ class DecisionEngine:
         
         # 2. Check VIX (volatility index)
         vix = feature_json.get('vix', 20.0)
+        if not isinstance(vix, (int, float)):
+            logger.warning(f"Invalid VIX type: {type(vix)}, using default")
+            vix = 20.0
+        
         VIX_MAX = 35.0  # Don't trade in extreme volatility
         if vix > VIX_MAX:
             return {'safe': False, 'reason': f'VIX too high ({vix:.1f} > {VIX_MAX})'}
@@ -209,4 +226,5 @@ class DecisionEngine:
             return {'safe': False, 'reason': f'Low volume ({volume_ratio:.2f}x average)'}
         
         # All checks passed
+        logger.debug("All market safety checks passed")
         return {'safe': True, 'reason': 'All safety checks passed'}

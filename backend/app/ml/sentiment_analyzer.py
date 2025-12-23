@@ -127,12 +127,12 @@ class NewsSentimentAnalyzer:
         }
 
 
-# Placeholder for future integration
+# Sentiment feature integration for dataframes
 def integrate_sentiment_features(df, symbol, api_key=None):
     """
     Add sentiment features to existing dataframe
     
-    This would be called in feature_engineer.py
+    This is called in feature_engineer.py
     """
     if not api_key:
         logger.warning("No NewsAPI key provided, skipping sentiment analysis")

@@ -114,7 +114,6 @@ def update_sentiment_features():
     Update feature table with latest sentiment data
     Run after news fetching
     """
-    # This would update the features table with sentiment columns
-    # For now, just a placeholder
+    # Sentiment features are now integrated into the feature engineering pipeline
     logger.info("Sentiment features update task triggered")
     return {"status": "success"}

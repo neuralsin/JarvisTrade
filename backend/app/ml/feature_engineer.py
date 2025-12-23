@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict
 import logging
+from app.ml.market_data import fetch_nifty_trend, fetch_india_vix
 
 logger = logging.getLogger(__name__)
 

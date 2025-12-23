@@ -8,6 +8,8 @@ export default function ManageStocks() {
     const [validation, setValidation] = useState(null);
     const [loading, setLoading] = useState(false);
     const [validating, setValidating] = useState(false);
+    const [editingParams, setEditingParams] = useState(null);
+    const [params, setParams] = useState({});
 
     useEffect(() => {
         fetchStocks();
@@ -78,6 +80,31 @@ export default function ManageStocks() {
             fetchStocks();
         } catch (error) {
             alert(`Failed to remove: ${error.response?.data?.detail || error.message}`);
+        }
+    };
+
+    const openParamsModal = (stock) => {
+        setEditingParams(stock);
+        setParams({
+            buy_confidence_threshold: stock.buy_confidence_threshold || 0.3,
+            sell_confidence_threshold: stock.sell_confidence_threshold || 0.5,
+            stop_multiplier: stock.stop_multiplier || 1.5,
+            target_multiplier: stock.target_multiplier || 2.5,
+            max_position_size: stock.max_position_size || 100,
+            is_trading_enabled: stock.is_trading_enabled !== undefined ? stock.is_trading_enabled : true
+        });
+    };
+
+    const saveParams = async () => {
+        if (!editingParams) return;
+
+        try {
+            await axios.put(`/api/v1/instruments/${editingParams.id}/parameters`, params);
+            alert(`Updated parameters for ${editingParams.symbol}`);
+            setEditingParams(null);
+            fetchStocks();
+        } catch (error) {
+            alert(`Failed to update parameters: ${error.response?.data?.detail || error.message}`);
         }
     };
 
@@ -198,24 +225,164 @@ export default function ManageStocks() {
                                         <div className="text-xs" style={{ color: 'var(--accent-primary)' }}>
                                             {stock.exchange} · {stock.instrument_type}
                                         </div>
+                                        <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                                            Buy: {(stock.buy_confidence_threshold || 0.3).toFixed(2)} | Sell: {(stock.sell_confidence_threshold || 0.5).toFixed(2)}
+                                        </div>
                                     </div>
-                                    <button
-                                        className="btn btn-sm"
-                                        onClick={() => removeStock(stock.id, stock.symbol)}
-                                        style={{
-                                            background: 'rgba(239, 68, 68, 0.1)',
-                                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                                            color: 'var(--accent-danger)'
-                                        }}
-                                    >
-                                        🗑️
-                                    </button>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-xs)' }}>
+                                        <button
+                                            className="btn btn-sm"
+                                            onClick={() => openParamsModal(stock)}
+                                            style={{
+                                                background: 'var(--accent-primary)',
+                                                padding: 'var(--spacing-xs) var(--spacing-sm)'
+                                            }}
+                                        >
+                                            ⚙️ Settings
+                                        </button>
+                                        <button
+                                            className="btn btn-sm"
+                                            onClick={() => removeStock(stock.id, stock.symbol)}
+                                            style={{
+                                                background: 'rgba(239, 68, 68, 0.1)',
+                                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                color: 'var(--accent-danger)'
+                                            }}
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
+
+            {/* Parameters Modal */}
+            {editingParams && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.7)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                }}>
+                    <div className="card" style={{ maxWidth: '500px', width: '90%' }}>
+                        <h3 className="card-title mb-md">Trading Parameters - {editingParams.symbol}</h3>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                            <div>
+                                <label className="text-sm font-semibold">Buy Confidence Threshold</label>
+                                <input
+                                    type="number"
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    value={params.buy_confidence_threshold}
+                                    onChange={(e) => setParams({ ...params, buy_confidence_threshold: parseFloat(e.target.value) })}
+                                    className="input"
+                                    style={{ marginTop: 'var(--spacing-xs)' }}
+                                />
+                                <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                                    Min probability to enter trade (0-1). Lower = more trades.
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-semibold">Sell Confidence Threshold</label>
+                                <input
+                                    type="number"
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    value={params.sell_confidence_threshold}
+                                    onChange={(e) => setParams({ ...params, sell_confidence_threshold: parseFloat(e.target.value) })}
+                                    className="input"
+                                    style={{ marginTop: 'var(--spacing-xs)' }}
+                                />
+                                <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                                    Min probability to exit trade (0-1). Higher = hold longer.
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-semibold">Stop Multiplier</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0.5"
+                                    max="5"
+                                    value={params.stop_multiplier}
+                                    onChange={(e) => setParams({ ...params, stop_multiplier: parseFloat(e.target.value) })}
+                                    className="input"
+                                    style={{ marginTop: 'var(--spacing-xs)' }}
+                                />
+                                <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                                    ATR multiplier for stop loss. Higher = wider stops.
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-semibold">Target Multiplier</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    min="1"
+                                    max="10"
+                                    value={params.target_multiplier}
+                                    onChange={(e) => setParams({ ...params, target_multiplier: parseFloat(e.target.value) })}
+                                    className="input"
+                                    style={{ marginTop: 'var(--spacing-xs)' }}
+                                />
+                                <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                                    ATR multiplier for target. Higher = bigger targets.
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-semibold">Max Position Size</label>
+                                <input
+                                    type="number"
+                                    step="10"
+                                    min="1"
+                                    max="1000"
+                                    value={params.max_position_size}
+                                    onChange={(e) => setParams({ ...params, max_position_size: parseInt(e.target.value) })}
+                                    className="input"
+                                    style={{ marginTop: 'var(--spacing-xs)' }}
+                                />
+                                <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                                    Maximum shares per trade.
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={params.is_trading_enabled}
+                                    onChange={(e) => setParams({ ...params, is_trading_enabled: e.target.checked })}
+                                />
+                                <label className="text-sm">Enable Trading</label>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-lg)' }}>
+                            <button className="btn btn-primary" onClick={saveParams} style={{ flex: 1 }}>
+                                Save Parameters
+                            </button>
+                            <button className="btn" onClick={() => setEditingParams(null)} style={{ flex: 1 }}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -44,7 +44,11 @@ celery_app.conf.beat_schedule = {
     },
     'check-signals': {
         'task': 'app.tasks.execution.check_and_execute_signals',
-        'schedule': crontab(minute='*/15'),  # Every 15 minutes during market hours
+        'schedule': 60.0,  # Every 60 seconds for ultra-fast peak detection
+    },
+    'monitor-positions': {
+        'task': 'app.tasks.position_monitor.monitor_open_positions',
+        'schedule': 30.0,  # Every 30 seconds to catch stop/target/peak exits
     },
     'retrain-weekly': {
         'task': 'app.tasks.model_training.scheduled_retrain',

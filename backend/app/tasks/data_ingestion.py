@@ -9,6 +9,7 @@ from app.db.database import SessionLocal
 from app.db.models import Instrument, HistoricalCandle, User
 from app.utils.retry import retry_with_backoff
 from app.utils.crypto import decrypt_text
+from app.utils.yfinance_wrapper import get_rate_limiter
 from app.config import settings
 from datetime import datetime, timedelta
 import yfinance as yf
@@ -17,6 +18,7 @@ import pandas as pd
 from io import BytesIO
 from zipfile import ZipFile
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +119,7 @@ def fetch_historical_kite(kite, symbol: str, from_date: datetime, to_date: datet
 
 def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval: str = '15m', exchange: str = 'NS'):
     """
-    Fetch historical data from Yahoo Finance
+    Fetch historical data from Yahoo Finance with rate limiting
     
     Args:
         symbol: Stock symbol (e.g., 'RELIANCE')
@@ -135,7 +137,9 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
         
         logger.info(f"Fetching from Yahoo Finance: {yahoo_symbol}")
         
-        df = yf.download(
+        # Use rate-limited wrapper to prevent 429 errors
+        rate_limiter = get_rate_limiter()
+        df = rate_limiter.download(
             yahoo_symbol,
             start=start_date,
             end=end_date,
@@ -267,6 +271,10 @@ def ingest_historical_data(
                 db.commit()
                 total_candles += count
                 logger.info(f"✓ {symbol}: {count} new candles from {source_used}")
+                
+                # Add small delay between symbols to avoid overwhelming Yahoo Finance
+                if source_used == 'yahoo' and symbols.index(symbol) < len(symbols) - 1:
+                    time.sleep(1.0)
             
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {str(e)}")

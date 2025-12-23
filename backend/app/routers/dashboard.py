@@ -53,20 +53,54 @@ async def get_dashboard(
         Trade.status == 'open'
     ).all()
     
-    open_trades_data = [
-        {
-            "id": str(trade.id),
-            "symbol": trade.instrument.symbol,
-            "entry_price": float(trade.entry_price) if trade.entry_price else None,
-            "entry_ts": trade.entry_ts.isoformat() + "Z" if trade.entry_ts else None,
-            "qty": trade.qty,
-            "stop": float(trade.stop_price) if trade.stop_price else None,
-            "target": float(trade.target_price) if trade.target_price else None,
-            "probability": float(trade.probability) if trade.probability else None,
-            "current_pnl": None  # TODO: Calculate based on current price
-        }
-        for trade in open_trades
-    ]
+    # Build open trades data with current P&L (with error handling)
+    from app.db.models import HistoricalCandle
+    open_trades_data = []
+    
+    for trade in open_trades:
+        try:
+            # Get latest candle for current price
+            latest_candle = db.query(HistoricalCandle).filter(
+                HistoricalCandle.instrument_id == trade.instrument_id
+            ).order_by(HistoricalCandle.ts_utc.desc()).first()
+            
+            current_pnl = None
+            current_price = None
+            
+            if latest_candle and trade.entry_price and trade.qty > 0:
+                current_price = float(latest_candle.close)
+                pnl = (current_price - float(trade.entry_price)) * trade.qty
+                current_pnl = round(pnl, 2)
+            elif not latest_candle:
+                logger.debug(f"No candle data for trade {trade.id}, P&L unavailable")
+            
+            open_trades_data.append({
+                "id": str(trade.id),
+                "symbol": trade.instrument.symbol,
+                "entry_price": float(trade.entry_price) if trade.entry_price else None,
+                "entry_ts": trade.entry_ts.isoformat() + "Z" if trade.entry_ts else None,
+                "qty": trade.qty,
+                "stop": float(trade.stop_price) if trade.stop_price else None,
+                "target": float(trade.target_price) if trade.target_price else None,
+                "probability": float(trade.probability) if trade.probability else None,
+                "current_pnl": current_pnl,
+                "current_price": current_price
+            })
+        except Exception as e:
+            logger.error(f"Error calculating P&L for trade {trade.id}: {str(e)}")
+            # Add trade without P&L on error
+            open_trades_data.append({
+                "id": str(trade.id),
+                "symbol": trade.instrument.symbol if hasattr(trade, 'instrument') else "UNKNOWN",
+                "entry_price": float(trade.entry_price) if trade.entry_price else None,
+                "entry_ts": trade.entry_ts.isoformat() + "Z" if trade.entry_ts else None,
+                "qty": trade.qty,
+                "stop": float(trade.stop_price) if trade.stop_price else None,
+                "target": float(trade.target_price) if trade.target_price else None,
+                "probability": float(trade.probability) if trade.probability else None,
+                "current_pnl": None,
+                "current_price": None
+            })
     
     # Probability heatmap (last 50 trades)
     recent_trades = db.query(Trade).join(Instrument).filter(

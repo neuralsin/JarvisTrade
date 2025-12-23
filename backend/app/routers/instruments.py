@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.db.models import User, Instrument
 from app.routers.auth import get_current_user
+from app.utils.yfinance_wrapper import get_rate_limiter
 from typing import Optional
 import logging
 import yfinance as yf
@@ -42,7 +43,13 @@ async def get_instruments(
             "symbol": inst.symbol,
             "name": inst.name,
             "exchange": inst.exchange,
-            "instrument_type": inst.instrument_type
+            "instrument_type": inst.instrument_type,
+            "buy_confidence_threshold": inst.buy_confidence_threshold or 0.3,
+            "sell_confidence_threshold": inst.sell_confidence_threshold or 0.5,
+            "stop_multiplier": inst.stop_multiplier or 1.5,
+            "target_multiplier": inst.target_multiplier or 2.5,
+            "max_position_size": inst.max_position_size or 100,
+            "is_trading_enabled": inst.is_trading_enabled if inst.is_trading_enabled is not None else True
         }
         for inst in instruments
     ]
@@ -55,7 +62,7 @@ async def validate_symbol(
 ):
     """
     Validate if stock symbol exists on exchange
-    Uses Yahoo Finance to check symbol validity
+    Uses Yahoo Finance with rate limiting to check symbol validity
     """
     # Map exchange codes to Yahoo Finance suffixes
     exchange_suffix_map = {
@@ -69,8 +76,11 @@ async def validate_symbol(
     ticker_symbol = f"{request.symbol}.{suffix}"
     
     try:
-        ticker = yf.Ticker(ticker_symbol)
-        info = ticker.info
+        # Use rate-limited wrapper to prevent 429 errors
+        rate_limiter = get_rate_limiter()
+        
+        # Get ticker info
+        info = rate_limiter.get_ticker_info(ticker_symbol)
         
         # Check if ticker returned valid data
         if not info or 'symbol' not in info or info.get('symbol') == '':
@@ -80,7 +90,7 @@ async def validate_symbol(
             }
         
         # Additional check - try to get recent data
-        hist = ticker.history(period="5d")
+        hist = rate_limiter.get_ticker_history(ticker_symbol, period="5d")
         if hist.empty:
             return {
                 "valid": False,
@@ -100,9 +110,15 @@ async def validate_symbol(
     
     except Exception as e:
         logger.error(f"Symbol validation failed for {ticker_symbol}: {str(e)}")
+        
+        # Provide user-friendly error message for rate limiting
+        error_msg = str(e)
+        if "429" in error_msg or "Too Many Requests" in error_msg:
+            error_msg = "Rate limit exceeded. Please try again in a few moments."
+        
         return {
             "valid": False,
-            "error": f"Validation failed: {str(e)}"
+            "error": f"Validation failed: {error_msg}"
         }
 
 

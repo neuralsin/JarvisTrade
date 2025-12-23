@@ -62,6 +62,19 @@ class Settings(BaseSettings):
     VIX_THRESHOLD: float = 40.0
     NIFTY_DROP_THRESHOLD: float = 0.04
     
+    # High-frequency trading configuration
+    SIGNAL_CHECK_INTERVAL: int = 60  # seconds
+    POSITION_CHECK_INTERVAL: int = 30  # seconds
+    
+    # Trading thresholds
+    BUY_PROBABILITY_THRESHOLD: float = 0.3
+    SELL_PROBABILITY_THRESHOLD: float = 0.5
+    
+    # Peak detection settings
+    PEAK_EXIT_ENABLED: bool = True
+    PEAK_MIN_PROFIT_PCT: float = 0.01  # 1% min profit before peak exit
+    PEAK_RSI_THRESHOLD: float = 70.0  # Overbought level
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

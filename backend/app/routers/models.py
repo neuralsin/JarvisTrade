@@ -1,7 +1,7 @@
 """
 Models API routes - list models, trigger training, get metrics
 """
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.db.database import get_db
@@ -16,7 +16,7 @@ router = APIRouter()
 
 class TrainModelRequest(BaseModel):
     model_name: str
-    model_type: str = 'xgboost'  # xgboost, lstm, or transformer
+    model_type: str = 'xgboost'  
     instrument_filter: Optional[str] = None
     hyperparams: Optional[Dict[str, Any]] = None
     start_date: Optional[str] = None
@@ -193,3 +193,64 @@ async def activate_model(
     logger.info(f"Model activated: {model.name} ({model_id})")
     
     return {"status": "success", "model_id": str(model.id), "name": model.name}
+
+
+@router.delete("/{model_id}")
+async def delete_model(
+    model_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a trained model
+    """
+    import os
+    import shutil
+    from uuid import UUID
+    
+    try:
+        # Validate UUID
+        try:
+            model_uuid = UUID(model_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid model ID format")
+        
+        # Get model
+        model = db.query(Model).filter(Model.id == model_uuid).first()
+        
+        if not model:
+            raise HTTPException(status_code=404, detail="Model not found")
+        
+        # Prevent deleting active model
+        if model.is_active:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot delete active model. Please activate another model first."
+            )
+        
+        # Delete model files from disk (if they exist)
+        if model.model_path and os.path.exists(model.model_path):
+            try:
+                shutil.rmtree(model.model_path)
+                logger.info(f"Deleted model files from {model.model_path}")
+            except Exception as e:
+                logger.warning(f"Could not delete model files: {str(e)}")
+        
+        # Delete from database
+        model_name = model.name
+        db.delete(model)
+        db.commit()
+        
+        logger.info(f"Model {model_name} (ID: {model_id}) deleted by {current_user.email}")
+        
+        return {
+            "status": "success",
+            "message": f"Model '{model_name}' deleted successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting model {model_id}: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete model: {str(e)}")

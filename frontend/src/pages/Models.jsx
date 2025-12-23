@@ -67,6 +67,29 @@ export default function Models() {
         setTrainingTaskId(null);
     };
 
+    const handleDeleteModel = async (modelId, modelName) => {
+        if (!window.confirm(`Are you sure you want to delete '${modelName}'? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            await api.delete(`/api/v1/models/${modelId}`);
+
+            // Clear selection if deleted model was selected
+            if (selectedModel?.id === modelId) {
+                setSelectedModel(null);
+            }
+
+            // Refresh models list
+            fetchModels();
+        } catch (err) {
+            console.error('Failed to delete model:', err);
+            const errorMsg = err.response?.data?.detail || 'Failed to delete model';
+            alert(errorMsg);
+        }
+    };
+
+
     if (loading) {
         return <div className="flex justify-center items-center" style={{ height: '400px' }}><div className="spinner"></div></div>;
     }
@@ -114,7 +137,24 @@ export default function Models() {
                                 >
                                     <div className="flex justify-between items-center mb-sm">
                                         <span className="font-semibold">{model.name}</span>
-                                        {model.is_active && <span className="badge badge-success">Active</span>}
+                                        <div style={{ display: 'flex', gap: 'var(--spacing-xs)', alignItems: 'center' }}>
+                                            {model.is_active && <span className="badge badge-success">Active</span>}
+                                            <button
+                                                className="btn btn-sm btn-danger"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDeleteModel(model.id, model.name);
+                                                }}
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    fontSize: '12px',
+                                                    minWidth: 'auto'
+                                                }}
+                                                title="Delete model"
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="text-xs text-muted">
                                         Trained: {new Date(model.trained_at).toLocaleDateString()}

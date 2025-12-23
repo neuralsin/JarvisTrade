@@ -114,9 +114,47 @@ async def get_buckets(
 
 
 def _matches_bucket_rules(trade, rules):
-    """Check if trade matches bucket rules"""
-    # Simplified - in production, check against instrument metadata
-    return True  # Placeholder
+    """Check if trade matches bucket rules based on sector and market cap"""
+    if not rules:
+        return True
+    
+    from app.db.models import Instrument
+    from app.db.database import SessionLocal
+    
+    db = SessionLocal()
+    try:
+        instrument = db.query(Instrument).filter(Instrument.id == trade.instrument_id).first()
+        if not instrument:
+            return False
+        
+        symbol = instrument.symbol.upper()
+        
+        # Sector matching
+        if 'sector' in rules:
+            sector = rules['sector'].upper()
+            sector_patterns = {
+                'IT': ['TCS', 'INFY', 'WIPRO', 'TECHM', 'HCLTECH', 'LTI', 'COFORGE', 'TATAELXSI'],
+                'BANKING': ['HDFC', 'ICICI', 'SBI', 'AXIS', 'KOTAK', 'INDUSIND'],
+                'PHARMA': ['SUNPHARMA', 'DRREDDY', 'CIPLA', 'LUPIN', 'BIOCON'],
+                'AUTO': ['MARUTI', 'TATA', 'M&M', 'BAJAJ', 'HERO'],
+            }
+            patterns = sector_patterns.get(sector, [])
+            if not any(p in symbol for p in patterns):
+                return False
+        
+        # Market cap matching
+        if 'market_cap' in rules:
+            cap = rules['market_cap'].lower()
+            large_caps = ['TCS', 'RELIANCE', 'HDFC', 'INFY', 'ICICI', 'WIPRO', 'SBI', 'BAJAJ']
+            
+            if cap == 'large' and not any(lc in symbol for lc in large_caps):
+                return False
+            elif cap in ['mid', 'small'] and any(lc in symbol for lc in large_caps):
+                return False
+        
+        return True
+    finally:
+        db.close()
 
 
 @router.post("/")

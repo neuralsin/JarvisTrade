@@ -58,7 +58,13 @@ async def toggle_kill_switch(
     
     logger.warning(f"Kill switch {'ENABLED' if request.enabled else 'DISABLED'} by {current_user.email}")
     
-    # TODO: Broadcast to Celery workers to update their cached state
+    # Broadcast to Celery workers to update their cached state
+    try:
+        from app.celery_app import celery_app
+        celery_app.control.broadcast('pool_restart', arguments={'reload': True}, reply=False)
+        logger.info("Broadcasted kill switch update to all Celery workers")
+    except Exception as e:
+        logger.error(f"Failed to broadcast to Celery workers: {e}")
     
     return {
         "status": "success",

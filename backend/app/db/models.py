@@ -35,7 +35,18 @@ class Instrument(Base):
     name = Column(Text)
     exchange = Column(Text)
     instrument_type = Column(Text)
+    sector = Column(String, nullable=True)
+    industry = Column(String, nullable=True)
+    market_cap_category = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Trading parameters
+    buy_confidence_threshold = Column(Float, default=0.3)
+    sell_confidence_threshold = Column(Float, default=0.5)
+    stop_multiplier = Column(Float, default=1.5)
+    target_multiplier = Column(Float, default=2.5)
+    max_position_size = Column(Integer, default=100)
+    is_trading_enabled = Column(Boolean, default=True)
     
     candles = relationship("HistoricalCandle", back_populates="instrument")
     features = relationship("Feature", back_populates="instrument")
