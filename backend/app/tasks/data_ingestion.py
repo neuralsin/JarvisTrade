@@ -119,50 +119,73 @@ def fetch_historical_kite(kite, symbol: str, from_date: datetime, to_date: datet
 
 def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval: str = '15m', exchange: str = 'NS'):
     """
-    Fetch historical data from Yahoo Finance with rate limiting
+    Fetch historical data from Yahoo Finance with multi-exchange retry.
+    Tries both NSE (.NS) and BSE (.BO) automatically to maximize stock coverage.
     
     Args:
-        symbol: Stock symbol (e.g., 'RELIANCE')
+        symbol: Stock symbol (e.g., 'TATAELXSI', 'HAL', 'RELIANCE')
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
         interval: Interval (1m, 5m, 15m, 1h, 1d)
-        exchange: 'NS' for NSE or 'BO' for BSE
+        exchange: Primary exchange to try first ('NS' for NSE or 'BO' for BSE)
     
     Returns:
-        DataFrame with OHLCV data
+        DataFrame with OHLCV data, or None if all attempts fail
     """
-    try:
-        # Format symbol for Yahoo Finance
-        yahoo_symbol = f"{symbol}.{exchange}"
-        
-        logger.info(f"Fetching from Yahoo Finance: {yahoo_symbol}")
-        
-        # Use rate-limited wrapper to prevent 429 errors
-        rate_limiter = get_rate_limiter()
-        df = rate_limiter.download(
-            yahoo_symbol,
-            start=start_date,
-            end=end_date,
-            interval=interval,
-            progress=False,
-            auto_adjust=False
-        )
-        
-        if df.empty:
-            logger.warning(f"No data from Yahoo Finance for {yahoo_symbol}")
-            return None
-        
-        # CRITICAL FIX: Normalize column names to lowercase
-        # yfinance returns capitalized columns (Open, High, Low, Close, Volume)
-        # but code expects lowercase (open, high, low, close, volume)
-        df.columns = df.columns.str.lower()
-        
-        logger.info(f"Fetched {len(df)} candles from Yahoo Finance for {symbol}")
-        return df
+    from app.utils.yfinance_wrapper import get_rate_limiter
     
-    except Exception as e:
-        logger.error(f"Yahoo Finance fetch failed for {symbol}: {str(e)}")
-        return None
+    # Build list of exchanges to try - primary first, then fallback
+    exchanges_to_try = []
+    if exchange == 'NS':
+        exchanges_to_try = ['NS', 'BO']  # Try NSE first, fallback to BSE
+    elif exchange == 'BO':
+        exchanges_to_try = ['BO', 'NS']  # Try BSE first, fallback to NSE
+    else:
+        exchanges_to_try = ['NS', 'BO']  # Default: try both
+    
+    rate_limiter = get_rate_limiter()
+    last_error = None
+    
+    for exch in exchanges_to_try:
+        yahoo_symbol = f"{symbol}.{exch}"
+        
+        try:
+            logger.info(f"Attempting Yahoo Finance: {yahoo_symbol}")
+            
+            df = rate_limiter.download(
+                yahoo_symbol,
+                start=start_date,
+                end=end_date,
+                interval=interval,
+                progress=False,
+                auto_adjust=False
+            )
+            
+            # Check if data was returned
+            if df is not None and not df.empty:
+                # CRITICAL FIX: Normalize column names to lowercase
+                # yfinance returns capitalized columns (Open, High, Low, Close, Volume)
+                # but code expects lowercase (open, high, low, close, volume)
+                df.columns = df.columns.str.lower()
+                
+                logger.info(f"✓ Successfully fetched {len(df)} candles from {yahoo_symbol}")
+                return df
+            else:
+                logger.warning(f"⚠ {yahoo_symbol} returned no data")
+                last_error = f"No data available"
+        
+        except Exception as e:
+            logger.warning(f"⚠ {yahoo_symbol} failed: {str(e)}")
+            last_error = str(e)
+            continue
+    
+    # All exchanges exhausted
+    logger.error(
+        f"❌ Failed to fetch {symbol} from Yahoo Finance. "
+        f"Tried: {', '.join([f'{symbol}.{e}' for e in exchanges_to_try])}. "
+        f"Last error: {last_error}"
+    )
+    return None
 
 
 def ingest_historical_data(
