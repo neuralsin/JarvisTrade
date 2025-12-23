@@ -90,17 +90,193 @@ def train_model(
             total_features = db.query(Feature).count()
             total_instruments = db.query(Instrument).count()
             
-            error_msg = f"No training data found for the specified criteria."
-            if instrument_filter:
-                error_msg += f" Filter: {instrument_filter}."
-            error_msg += f" Date range: {start_date} to {end_date}."
-            error_msg += f" Total features in DB: {total_features}, Total instruments: {total_instruments}."
+            logger.warning(f"No features found. Attempting auto-fetch from Yahoo Finance...")
             
-            if total_features == 0:
-                error_msg += " You may need to run data ingestion first."
+            # AUTO-FETCH: Dynamically fetch data from Yahoo Finance if missing
+            try:
+                from app.tasks.data_ingestion import ingest_historical_data
+                from app.ml.labeler import generate_labels
+                
+                # Determine which symbols to fetch
+                if instrument_filter:
+                    symbols_to_fetch = [instrument_filter]
+                else:
+                    # Get all instrument symbols
+                    all_instruments = db.query(Instrument.symbol).all()
+                    symbols_to_fetch = [i.symbol for i in all_instruments] if all_instruments else []
+                
+                if not symbols_to_fetch:
+                    raise ValueError("No instruments found in database. Please add instruments first.")
+                
+                logger.info(f"Auto-fetching data for {len(symbols_to_fetch)} symbol(s): {symbols_to_fetch}")
+                
+                # Fetch 6 months of daily data from Yahoo Finance
+                auto_end = datetime.utcnow().strftime('%Y-%m-%d')
+                auto_start = (datetime.utcnow() - timedelta(days=180)).strftime('%Y-%m-%d')
+                
+                self.update_state(state='PROGRESS', meta={
+                    'status': f'Fetching historical data from Yahoo Finance for {len(symbols_to_fetch)} instrument(s)...',
+                    'progress': 15
+                })
+                
+                # Call data ingestion (synchronous)
+                ingest_result = ingest_historical_data(
+                    symbols=symbols_to_fetch,
+                    start_date=auto_start,
+                    end_date=auto_end,
+                    interval='1d',
+                    exchange='NSE'
+                )
+                
+                logger.info(f"Data ingestion complete: {ingest_result.get('total_candles', 0)} candles")
+                
+                # Now compute features and labels for each symbol
+                self.update_state(state='PROGRESS', meta={
+                    'status': 'Computing features and labels...',
+                    'progress': 20
+                })
+                
+                # Track fetch statistics
+                fetch_stats = {'success': [], 'failed': [], 'insufficient_data': []}
+                
+                for symbol in symbols_to_fetch:
+                    instrument_obj = db.query(Instrument).filter(Instrument.symbol == symbol).first()
+                    if not instrument_obj:
+                        continue
+                    
+                    # Get historical candles
+                    candles = db.query(HistoricalCandle).filter(
+                        HistoricalCandle.instrument_id == instrument_obj.id,
+                        HistoricalCandle.timeframe == '1d'
+                    ).order_by(HistoricalCandle.ts_utc).all()
+                    
+                    # DATA VALIDATION: Check for sufficient candles
+                    MIN_CANDLES = 200  # Need 200+ for EMA200 calculation
+                    if not candles:
+                        logger.warning(f"No candles found for {symbol} after ingestion")
+                        fetch_stats['failed'].append(symbol)
+                        continue
+                    
+                    if len(candles) < MIN_CANDLES:
+                        logger.warning(
+                            f"Insufficient candles for {symbol}: {len(candles)} (need {MIN_CANDLES}+ for feature computation)"
+                        )
+                        fetch_stats['insufficient_data'].append(f"{symbol} ({len(candles)} candles)")
+                        continue
+                    
+                    # Convert to DataFrame
+                    candle_data = [{
+                        'ts_utc': c.ts_utc,
+                        'open': c.open,
+                        'high': c.high,
+                        'low': c.low,
+                        'close': c.close,
+                        'volume': c.volume
+                    } for c in candles]
+                    
+                    df = pd.DataFrame(candle_data)
+                    
+                    # Compute features
+                    df_with_features = compute_features(df, instrument_id=str(instrument_obj.id), db_session=db)
+                    
+                    # Generate labels
+                    df_labeled = generate_labels(df_with_features)
+                    
+                    # Store features in database
+                    for idx, row in df_labeled.iterrows():
+                        if pd.isna(row.get('target')):
+                            continue
+                        
+                        feature_dict = {
+                            'returns_1': row.get('returns_1'),
+                            'returns_5': row.get('returns_5'),
+                            'ema_20': row.get('ema_20'),
+                            'ema_50': row.get('ema_50'),
+                            'ema_200': row.get('ema_200'),
+                            'distance_from_ema200': row.get('distance_from_ema200'),
+                            'rsi_14': row.get('rsi_14'),
+                            'rsi_slope': row.get('rsi_slope'),
+                            'atr_14': row.get('atr_14'),
+                            'atr_percent': row.get('atr_percent'),
+                            'volume_ratio': row.get('volume_ratio'),
+                            'nifty_trend': row.get('nifty_trend'),
+                            'vix': row.get('vix'),
+                            'sentiment_1d': row.get('sentiment_1d', 0.0),
+                            'sentiment_3d': row.get('sentiment_3d', 0.0),
+                            'sentiment_7d': row.get('sentiment_7d', 0.0)
+                        }
+                        
+                        # Check if feature already exists
+                        existing = db.query(Feature).filter(
+                            Feature.instrument_id == instrument_obj.id,
+                            Feature.ts_utc == row['ts_utc']
+                        ).first()
+                        
+                        if not existing:
+                            feature_record = Feature(
+                                instrument_id=instrument_obj.id,
+                                ts_utc=row['ts_utc'],
+                                feature_json=feature_dict,
+                                target=int(row['target'])
+                            )
+                            db.add(feature_record)
+                    
+                    db.commit()
+                    fetch_stats['success'].append(symbol)
+                    logger.info(f"✓ Computed and stored features for {symbol}")
+                
+                # Report fetch statistics
+                logger.info(
+                    f"Auto-fetch complete: "
+                    f"Success={len(fetch_stats['success'])}, "
+                    f"Failed={len(fetch_stats['failed'])}, "
+                    f"Insufficient data={len(fetch_stats['insufficient_data'])}"
+                )
+                
+                if fetch_stats['success']:
+                    logger.info(f"✓ Successfully processed: {', '.join(fetch_stats['success'])}")
+                if fetch_stats['failed']:
+                    logger.warning(f"⚠ Failed to fetch: {', '.join(fetch_stats['failed'])}")
+                if fetch_stats['insufficient_data']:
+                    logger.warning(f"⚠ Insufficient data: {', '.join(fetch_stats['insufficient_data'])}")
+                
+                # Retry feature query after auto-fetch
+                features_data = query.all()
+                
+                if not features_data:
+                    error_msg = f"Auto-fetch completed but no usable features generated.\n"
+                    error_msg += f"Total candles fetched: {ingest_result.get('total_candles', 0)}\n"
+                    error_msg += f"Successfully processed: {len(fetch_stats['success'])} instruments\n"
+                    error_msg += f"Failed: {len(fetch_stats['failed'])} instruments\n"
+                    error_msg += f"Insufficient data: {len(fetch_stats['insufficient_data'])} instruments\n"
+                    
+                    if fetch_stats['failed']:
+                        error_msg += f"\nFailed symbols: {', '.join(fetch_stats['failed'])}. "
+                        error_msg += "These symbols may not exist on Yahoo Finance or use different tickers.\n"
+                    
+                    if fetch_stats['insufficient_data']:
+                        error_msg += f"\nInsufficient data: {', '.join(fetch_stats['insufficient_data'])}. "
+                        error_msg += "Need 200+ candles for feature computation (EMA200 calculation).\n"
+                    
+                    error_msg += "\nSuggestion: Try training without instrument filter to use all available data."
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                
+                logger.info(
+                    f"✓ Auto-fetch successful! Proceeding with training on {len(features_data)} features from "
+                    f"{len(fetch_stats['success'])} instrument(s)"
+                )
             
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+            except Exception as auto_fetch_error:
+                # If auto-fetch fails, provide detailed error message
+                error_msg = f"Training data not found and auto-fetch failed: {str(auto_fetch_error)}. "
+                if instrument_filter:
+                    error_msg += f"Filter: {instrument_filter}. "
+                error_msg += f"Date range: {start_date} to {end_date}. "
+                error_msg += f"Total features in DB: {total_features}, Total instruments: {total_instruments}. "
+                error_msg += "You may need to check your internet connection or Yahoo Finance availability."
+                logger.error(error_msg)
+                raise ValueError(error_msg)
         
         # Convert to DataFrame
         df_rows = []
@@ -349,7 +525,7 @@ def _train_transformer(df, model_name, hyperparams, task):
     test_recall = recall_score(y_test_seq, y_pred, zero_division=0)
     
     val_loss = history.history['val_loss'][-1]
-    val_auc = history.history['val_auc'][-1]
+    val_auc = history.history.get('val_auc_1', history.history.get('val_auc', [test_auc]))[-1]
     
     # Store training distributions for drift detection
     feature_distributions = {}
@@ -359,7 +535,7 @@ def _train_transformer(df, model_name, hyperparams, task):
             feature_distributions[col] = df[col].dropna().values.tolist()[:1000]
     
     metrics = {
-        'train_auc': history.history['auc'][-1],
+        'train_auc': history.history.get('auc_1', history.history.get('auc', [test_auc]))[-1],
         'val_auc': val_auc,
         'test_auc': test_auc,
         'test_accuracy': test_acc,
@@ -381,7 +557,7 @@ def _train_transformer(df, model_name, hyperparams, task):
     logger.info(f"TP: {true_positives}, FP: {false_positives}, TN: {true_negatives}, FN: {false_negatives}")
     
     # Save model
-    model_path = f"/app/models/{model_name}"
+    model_path = f"models/{model_name}"
     os.makedirs(model_path, exist_ok=True)
     transformer.save_model(model_path)
     

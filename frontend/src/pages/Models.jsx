@@ -63,7 +63,8 @@ export default function Models() {
     };
 
     const handleTrainingError = (error) => {
-        alert('Training failed. Check console for details.');
+        console.error('Training failed with error:', error);
+        // Error is already displayed in TrainingProgress component
         setTrainingTaskId(null);
     };
 
@@ -161,7 +162,7 @@ export default function Models() {
                                     </div>
                                     {model.metrics && (
                                         <div className="text-sm mt-sm">
-                                            AUC: {(model.metrics.auc_roc || 0).toFixed(3)}
+                                            AUC: {(model.metrics.auc_roc || model.metrics.test_auc || 0).toFixed(3)}
                                         </div>
                                     )}
                                 </div>
@@ -188,16 +189,26 @@ export default function Models() {
                                 </div>
                                 <div className="grid grid-cols-4">
                                     <div>
-                                        <div className="text-muted text-sm">AUC-ROC</div>
-                                        <div className="text-xl font-bold">{(selectedModel.metrics?.auc_roc || 0).toFixed(3)}</div>
+                                        <div className="text-muted text-sm">AUC</div>
+                                        <div className="text-xl font-bold">
+                                            {(selectedModel.metrics?.auc_roc || selectedModel.metrics?.test_auc || 0).toFixed(3)}
+                                        </div>
                                     </div>
                                     <div>
-                                        <div className="text-muted text-sm">Precision@K</div>
-                                        <div className="text-xl font-bold">{(selectedModel.metrics?.precision_at_k || 0).toFixed(3)}</div>
+                                        <div className="text-muted text-sm">
+                                            {selectedModel.metrics?.precision_at_k ? 'Precision@K' : 'Test Precision'}
+                                        </div>
+                                        <div className="text-xl font-bold">
+                                            {(selectedModel.metrics?.precision_at_k || selectedModel.metrics?.test_precision || 0).toFixed(3)}
+                                        </div>
                                     </div>
                                     <div>
-                                        <div className="text-muted text-sm">F1 Score</div>
-                                        <div className="text-xl font-bold">{(selectedModel.metrics?.f1 || 0).toFixed(3)}</div>
+                                        <div className="text-muted text-sm">
+                                            {selectedModel.metrics?.f1 ? 'F1 Score' : 'Test Accuracy'}
+                                        </div>
+                                        <div className="text-xl font-bold">
+                                            {(selectedModel.metrics?.f1 || selectedModel.metrics?.test_accuracy || 0).toFixed(3)}
+                                        </div>
                                     </div>
                                     <div>
                                         <div className="text-muted text-sm">Type</div>
@@ -245,3 +256,4 @@ export default function Models() {
         </div>
     );
 }
+

@@ -152,6 +152,11 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
             logger.warning(f"No data from Yahoo Finance for {yahoo_symbol}")
             return None
         
+        # CRITICAL FIX: Normalize column names to lowercase
+        # yfinance returns capitalized columns (Open, High, Low, Close, Volume)
+        # but code expects lowercase (open, high, low, close, volume)
+        df.columns = df.columns.str.lower()
+        
         logger.info(f"Fetched {len(df)} candles from Yahoo Finance for {symbol}")
         return df
     
@@ -259,11 +264,11 @@ def ingest_historical_data(
                             instrument_id=instrument.id,
                             timeframe=timeframe,
                             ts_utc=ts_utc,
-                            open=float(row['Open']),
-                            high=float(row['High']),
-                            low=float(row['Low']),
-                            close=float(row['Close']),
-                            volume=float(row['Volume'])
+                            open=float(row['open']),
+                            high=float(row['high']),
+                            low=float(row['low']),
+                            close=float(row['close']),
+                            volume=float(row['volume'])
                         )
                         db.add(candle)
                         count += 1

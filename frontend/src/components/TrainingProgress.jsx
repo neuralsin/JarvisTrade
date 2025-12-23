@@ -44,7 +44,7 @@ export default function TrainingProgress({ taskId, onComplete, onError }) {
                 <div style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>
                     <div style={{ fontSize: '3rem', marginBottom: 'var(--spacing-md)' }}>❌</div>
                     <h3 style={{ color: 'var(--accent-danger)', marginBottom: 'var(--spacing-sm)' }}>Training Failed</h3>
-                    <p className="text-muted">{error}</p>
+                    <p className="text-muted" style={{ whiteSpace: 'pre-wrap', maxWidth: '800px', margin: '0 auto' }}>{error}</p>
                 </div>
             </div>
         );

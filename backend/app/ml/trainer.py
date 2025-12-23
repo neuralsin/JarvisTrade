@@ -49,11 +49,12 @@ class ModelTrainer:
         df['ts_utc'] = pd.to_datetime(df['ts_utc'])
         df = df.sort_values('ts_utc').reset_index(drop=True)
         
-        # Feature columns
+        # Feature columns (must match feature_engineer.py output)
         feature_cols = [
             'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
             'distance_from_ema200', 'rsi_14', 'rsi_slope',
-            'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix'
+            'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
+            'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
         ]
         
         # Remove rows with null targets
