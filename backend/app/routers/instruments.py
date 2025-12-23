@@ -7,10 +7,8 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.db.models import User, Instrument
 from app.routers.auth import get_current_user
-from app.utils.yfinance_wrapper import get_rate_limiter
 from typing import Optional
 import logging
-import yfinance as yf
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -26,7 +24,7 @@ class AddInstrumentRequest(BaseModel):
     symbol: str
     name: Optional[str] = None
     exchange: str = "NSE"
-    data_period: str = "60d"  # Default 60 days
+    data_period: str = "60d"
 
 
 @router.get("/")
@@ -56,70 +54,25 @@ async def get_instruments(
 
 
 @router.post("/validate")
-async def validate_symbol(
+async def validate_symbol_endpoint(
     request: ValidateSymbolRequest,
     current_user: User = Depends(get_current_user)
 ):
     """
-    Validate if stock symbol exists on exchange
-    Uses Yahoo Finance with rate limiting to check symbol validity
+    Validate stock symbol using Kite Connect API.
+    Fast, reliable, no rate limits.
     """
-    # Map exchange codes to Yahoo Finance suffixes
-    exchange_suffix_map = {
-        "NSE": "NS",  # National Stock Exchange
-        "NS": "NS",   # Alias
-        "BSE": "BO",  # Bombay Stock Exchange
-        "BO": "BO"    # Alias
-    }
+    from app.utils.kite_validator import validate_symbol
     
-    suffix = exchange_suffix_map.get(request.exchange, request.exchange)
-    ticker_symbol = f"{request.symbol}.{suffix}"
+    # Map NS/BO to NSE/BSE for Kite
+    exchange = request.exchange
+    if exchange == "NS":
+        exchange = "NSE"
+    elif exchange == "BO":
+        exchange = "BSE"
     
-    try:
-        # Use rate-limited wrapper to prevent 429 errors
-        rate_limiter = get_rate_limiter()
-        
-        # Get ticker info
-        info = rate_limiter.get_ticker_info(ticker_symbol)
-        
-        # Check if ticker returned valid data
-        if not info or 'symbol' not in info or info.get('symbol') == '':
-            return {
-                "valid": False,
-                "error": "Symbol not found on exchange"
-            }
-        
-        # Additional check - try to get recent data
-        hist = rate_limiter.get_ticker_history(ticker_symbol, period="5d")
-        if hist.empty:
-            return {
-                "valid": False,
-                "error": "No trading data available for this symbol"
-            }
-        
-        return {
-            "valid": True,
-            "symbol": request.symbol,
-            "name": info.get('longName') or info.get('shortName') or request.symbol,
-            "exchange": request.exchange,
-            "sector": info.get('sector', 'N/A'),
-            "industry": info.get('industry', 'N/A'),
-            "market_cap": info.get('marketCap'),
-            "currency": info.get('currency', 'INR')
-        }
-    
-    except Exception as e:
-        logger.error(f"Symbol validation failed for {ticker_symbol}: {str(e)}")
-        
-        # Provide user-friendly error message for rate limiting
-        error_msg = str(e)
-        if "429" in error_msg or "Too Many Requests" in error_msg:
-            error_msg = "Rate limit exceeded. Please try again in a few moments."
-        
-        return {
-            "valid": False,
-            "error": f"Validation failed: {error_msg}"
-        }
+    result = validate_symbol(request.symbol, exchange)
+    return result
 
 
 @router.post("/add")
@@ -128,12 +81,7 @@ async def add_instrument(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Add new instrument to the system
-    - Validates symbol first
-    - Creates instrument record
-    - Triggers background data fetch
-    """
+    """Add new instrument to the system"""
     # Check if already exists
     existing = db.query(Instrument).filter(
         Instrument.symbol == request.symbol.upper(),
@@ -147,7 +95,7 @@ async def add_instrument(
         }
     
     # Validate symbol first
-    validation_result = await validate_symbol(
+    validation_result = await validate_symbol_endpoint(
         ValidateSymbolRequest(
             symbol=request.symbol.upper(),
             exchange=request.exchange
@@ -166,7 +114,7 @@ async def add_instrument(
         symbol=request.symbol.upper(),
         name=request.name or validation_result['name'],
         exchange=request.exchange,
-        instrument_type='EQ'  # Equity
+        instrument_type='EQ'
     )
     
     db.add(instrument)
@@ -175,24 +123,20 @@ async def add_instrument(
     
     logger.info(f"Added instrument: {instrument.symbol} ({instrument.name})")
     
-    # Trigger background data fetch based on period
+    # Trigger background data fetch
     try:
         from app.tasks.data_ingestion import fetch_historical_data
         
         end_date = datetime.utcnow().strftime('%Y-%m-%d')
-        
-        # Calculate start date and interval based on period
         period_map = {
-            '60d': (59, '15m'),   # 60 days, 15min candles
-            '1y': (365, '1d'),    # 1 year, daily candles
-            '2y': (730, '1d'),    # 2 years, daily candles
-            '5y': (1825, '1d')    # 5 years, daily candles
+            '60d': (59, '15m'),
+            '1y': (365, '1d'),
+            '2y': (730, '1d'),
+            '5y': (1825, '1d')
         }
         
         days, interval = period_map.get(request.data_period, (59, '15m'))
         start_date = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        logger.info(f"Fetching {request.data_period} of data for {instrument.symbol}: {start_date} to {end_date}, interval={interval}")
         
         task = fetch_historical_data.delay(
             symbols=[instrument.symbol],
@@ -202,14 +146,12 @@ async def add_instrument(
             exchange=request.exchange
         )
         
-        logger.info(f"Triggered data fetch for {instrument.symbol}: task {task.id}")
-        
         return {
             "success": True,
             "id": str(instrument.id),
             "symbol": instrument.symbol,
             "name": instrument.name,
-            "message": f"Added {instrument.symbol}. Fetching {request.data_period} of historical data...",
+            "message": f"Added {instrument.symbol}. Fetching {request.data_period} of data...",
             "data_fetch_task_id": task.id
         }
     
@@ -231,10 +173,7 @@ async def remove_instrument(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Remove instrument from system
-    Cascades to delete related features, candles, etc.
-    """
+    """Remove instrument from system"""
     instrument = db.query(Instrument).filter(Instrument.id == instrument_id).first()
     
     if not instrument:
@@ -243,7 +182,6 @@ async def remove_instrument(
     symbol = instrument.symbol
     name = instrument.name
     
-    # Delete (cascades to features, candles, etc. due to ON DELETE CASCADE)
     db.delete(instrument)
     db.commit()
     
