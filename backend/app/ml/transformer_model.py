@@ -1,6 +1,7 @@
 """
 Transformer model for time series prediction
 Attention-based architecture with positional encoding
+GPU-accelerated with CUDA support
 """
 import numpy as np
 import pandas as pd
@@ -12,6 +13,21 @@ import pickle
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Configure TensorFlow to use GPU if available
+try:
+    # List available GPUs
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        # Enable memory growth to prevent TensorFlow from allocating all GPU memory
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logger.info(f"✓ CUDA enabled! Found {len(gpus)} GPU(s): {[gpu.name for gpu in gpus]}")
+        logger.info(f"  TensorFlow will use GPU for transformer training")
+    else:
+        logger.warning("No GPU found. Transformer will train on CPU (slow!)")
+except Exception as e:
+    logger.warning(f"GPU configuration failed: {e}. Using CPU for transformer training")
 
 
 class PositionalEncoding(layers.Layer):

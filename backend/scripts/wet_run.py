@@ -95,12 +95,13 @@ try:
     print(f"Expected samples: ~{max_features}")
     print("\nStarting training task...")
     
-    # Trigger training (use positional args)
+    # Trigger training with correct parameter names  
     result = train_model.delay(
-        best_instrument.symbol,
-        'xgboost',
-        min_date.strftime('%Y-%m-%d'),
-        max_date.strftime('%Y-%m-%d')
+        model_name=f"wet_run_{best_instrument.symbol}",
+        instrument_filter=best_instrument.symbol,  # Required parameter
+        model_type='xgboost',
+        start_date=min_date.strftime('%Y-%m-%d'),
+        end_date=max_date.strftime('%Y-%m-%d')
     )
     
     print(f"\n✅ Training task submitted!")

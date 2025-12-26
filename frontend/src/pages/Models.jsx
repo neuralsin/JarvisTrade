@@ -48,11 +48,24 @@ export default function Models() {
     const handleWizardSubmit = async (formData) => {
         try {
             const response = await axios.post('/api/v1/models/train', formData);
-            setTrainingTaskId(response.data.task_id);
-            setShowWizard(false);
-            alert(`Training started! Task ID: ${response.data.task_id}`);
+
+            // Check if response contains an error (even with 200 status)
+            if (response.data.error) {
+                alert(`Training failed: ${response.data.error}\n${response.data.details || ''}`);
+                return;
+            }
+
+            // Success - got task_id
+            if (response.data.task_id) {
+                setTrainingTaskId(response.data.task_id);
+                setShowWizard(false);
+                alert(`Training started! Task ID: ${response.data.task_id}`);
+            } else {
+                alert('Training response missing task_id. Check backend logs.');
+            }
         } catch (error) {
-            alert(`Failed to start training: ${error.response?.data?.error || error.message}`);
+            const errorMsg = error.response?.data?.error || error.response?.data?.detail || error.message;
+            alert(`Failed to start training: ${errorMsg}`);
         }
     };
 
@@ -74,7 +87,7 @@ export default function Models() {
         }
 
         try {
-            await api.delete(`/api/v1/models/${modelId}`);
+            await axios.delete(`/api/v1/models/${modelId}`);
 
             // Clear selection if deleted model was selected
             if (selectedModel?.id === modelId) {
@@ -83,6 +96,7 @@ export default function Models() {
 
             // Refresh models list
             fetchModels();
+            alert('Model deleted successfully');
         } catch (err) {
             console.error('Failed to delete model:', err);
             const errorMsg = err.response?.data?.detail || 'Failed to delete model';

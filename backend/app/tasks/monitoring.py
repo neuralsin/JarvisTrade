@@ -65,7 +65,13 @@ def detect_model_drift(self):
         if len(drift_features) >= 3:
             logger.warning(f"Data drift detected in {len(drift_features)} features")
             from app.tasks.model_training import train_model
-            train_model.delay(model_name=f"drift_retrain_{datetime.utcnow().strftime('%Y%m%d')}")
+            # Note: For drift retrain, we should ideally retrain the same stock as active_model
+            # For now, use first available stock or make this configurable
+            train_model.delay(
+                model_name=f"drift_retrain_{datetime.utcnow().strftime('%Y%m%d')}",
+                instrument_filter="RELIANCE",  # TODO: Get from active_model.stock_symbol
+                model_type="xgboost"
+            )
             
             return {
                 "status": "drift_detected",

@@ -82,7 +82,7 @@ def prepare_password(password):
 
 db = SessionLocal()
 user = User(
-    email='test@example.com',
+    email='test121@example.com',
     password_hash=pwd_context.hash(prepare_password('testpass123')),
     auto_execute=True,
     paper_trading_enabled=True

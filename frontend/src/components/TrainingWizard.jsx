@@ -6,6 +6,7 @@ export default function TrainingWizard({ onSubmit, onCancel }) {
         model_type: '',
         model_name: '',
         instrument_filter: '',
+        interval: '15m',  // NEW: Default candle interval
         start_date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         end_date: new Date().toISOString().split('T')[0]
     });
@@ -180,6 +181,47 @@ export default function TrainingWizard({ onSubmit, onCancel }) {
                                 </div>
 
                                 <div className="form-group">
+                                    <label className="form-label">Candle Interval *</label>
+                                    <select
+                                        className="form-input"
+                                        value={formData.interval}
+                                        onChange={(e) => {
+                                            const interval = e.target.value;
+                                            // Yahoo Finance limits: intraday=60d, daily=730d
+                                            const intraday = ['1m', '5m', '15m', '30m', '1h'];
+                                            const maxDays = intraday.includes(interval) ? 60 : 730;
+
+                                            // Auto-adjust dates to max allowed
+                                            const endDate = new Date();
+                                            const startDate = new Date(endDate - maxDays * 24 * 60 * 60 * 1000);
+
+                                            setFormData({
+                                                ...formData,
+                                                interval,
+                                                start_date: startDate.toISOString().split('T')[0],
+                                                end_date: endDate.toISOString().split('T')[0]
+                                            });
+                                        }}
+                                    >
+                                        <optgroup label="📊 Intraday (Max 60 days)">
+                                            <option value="15m">15 Minutes (Recommended)</option>
+                                            <option value="30m">30 Minutes</option>
+                                            <option value="1h">1 Hour</option>
+                                        </optgroup>
+                                        <optgroup label="📈 Daily+ (Max 2 years)">
+                                            <option value="1d">Daily</option>
+                                            <option value="1wk">Weekly</option>
+                                            <option value="1mo">Monthly</option>
+                                        </optgroup>
+                                    </select>
+                                    <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-xs)' }}>
+                                        {['1m', '5m', '15m', '30m', '1h'].includes(formData.interval)
+                                            ? '⚠️ Intraday data limited to 60 days by Yahoo Finance'
+                                            : '✓ Can fetch up to 2 years of data'}
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
                                     <label className="form-label">Training Period</label>
                                     <select
                                         className="form-input"
@@ -281,6 +323,17 @@ export default function TrainingWizard({ onSubmit, onCancel }) {
                                         <div>
                                             <div className="text-xs text-muted">Model Type</div>
                                             <div className="text-lg">{selectedModel.icon} {selectedModel.name}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-muted">Candle Interval</div>
+                                            <div className="text-lg">
+                                                {formData.interval === '15m' ? '15 Minutes' :
+                                                    formData.interval === '30m' ? '30 Minutes' :
+                                                        formData.interval === '1h' ? '1 Hour' :
+                                                            formData.interval === '1d' ? 'Daily' :
+                                                                formData.interval === '1wk' ? 'Weekly' :
+                                                                    formData.interval === '1mo' ? 'Monthly' : formData.interval}
+                                            </div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-muted">Training Stocks</div>

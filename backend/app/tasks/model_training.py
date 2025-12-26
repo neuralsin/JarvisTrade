@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 def train_model(
     self, 
     model_name: str,
-    stock_symbol: str,  # Phase 3: Required - which stock to train on
+    instrument_filter: str,  # Changed from stock_symbol - matches API parameter name
     model_type: str = 'xgboost',
+    interval: str = '15m',  # NEW: Candle interval
     hyperparams: dict = None,
     start_date: str = None,
     end_date: str = None
@@ -33,8 +34,9 @@ def train_model(
     
     Args:
         model_name: Name for the model
-        stock_symbol: Stock symbol to train on (e.g., 'RELIANCE') - REQUIRED
+        instrument_filter: Stock symbol to train on (e.g., 'RELIANCE') - REQUIRED
         model_type: 'xgboost', 'lstm', or 'transformer'
+        interval: Candle interval ('15m', '1h', '1d', etc.)
         hyperparams: Optional hyperparameter overrides
         start_date: Training start date (YYYY-MM-DD), defaults to 2 years ago
         end_date: Training end date (YYYY-MM-DD), defaults to today
@@ -45,13 +47,16 @@ def train_model(
     db = SessionLocal()
     task_id = self.request.id
     
+    # Map API parameter name to internal variable name
+    stock_symbol = instrument_filter
+    
     try:
         # Phase 3: Validate stock_symbol is provided
         if not stock_symbol:
             raise ValueError(
-                "stock_symbol is required for model training. "
+                "instrument_filter is required for model training. "
                 "Each model must be trained on a specific stock. "
-                "Example: stock_symbol='RELIANCE'"
+                "Example: instrument_filter='RELIANCE'"
             )
         
         # Normalize stock symbol
@@ -112,16 +117,26 @@ def train_model(
                 from app.tasks.data_ingestion import ingest_historical_data
                 from app.ml.labeler import generate_labels
         
-        # Determine which symbols to fetch
-        # Phase 3: Only fetch the specific stock we're training on
-        symbols_to_fetch = [stock_symbol]
+                # Determine which symbols to fetch
+                # Phase 3: Only fetch the specific stock we're training on
+                symbols_to_fetch = [stock_symbol]
                 
                 
-                logger.info(f"Auto-fetching data for {stock_symbol}")
+                logger.info(f"Auto-fetching data for {stock_symbol} with interval={interval}")
                 
-                # Fetch 6 months of daily data from Yahoo Finance
+                # Calculate appropriate date range based on interval
+                # Yahoo Finance limits: intraday (15m, 1h) = 60 days max, daily (1d) = 730 days max
                 auto_end = datetime.utcnow().strftime('%Y-%m-%d')
-                auto_start = (datetime.utcnow() - timedelta(days=180)).strftime('%Y-%m-%d')
+                
+                intraday_intervals = ['1m', '5m', '15m', '30m', '1h']
+                if interval in intraday_intervals:
+                    # Intraday: max 60 days
+                    auto_start = (datetime.utcnow() - timedelta(days=60)).strftime('%Y-%m-%d')
+                    logger.info(f"Using 60-day range for intraday interval {interval}")
+                else:
+                    # Daily/Weekly/Monthly: can go back further
+                    auto_start = (datetime.utcnow() - timedelta(days=365)).strftime('%Y-%m-%d')
+                    logger.info(f"Using 365-day range for interval {interval}")
                 
                 
                 self.update_state(state='PROGRESS', meta={
@@ -129,16 +144,33 @@ def train_model(
                     'progress': 15
                 })
                 
-                # Call data ingestion (synchronous)
-                ingest_result = ingest_historical_data(
-                    symbols=symbols_to_fetch,
-                    start_date=auto_start,
-                    end_date=auto_end,
-                    interval='1d',
-                    exchange='NSE'
-                )
-                
-                logger.info(f"Data ingestion complete: {ingest_result.get('total_candles', 0)} candles")
+                # Call data ingestion with error handling
+                try:
+                    ingest_result = ingest_historical_data(
+                        symbols=symbols_to_fetch,
+                        start_date=auto_start,
+                        end_date=auto_end,
+                        interval=interval,  # Use user-selected interval
+                        exchange='NSE'
+                    )
+                    
+                    logger.info(f"Data ingestion complete: {ingest_result.get('total_candles', 0)} candles")
+                    
+                    if ingest_result.get('total_candles', 0) == 0:
+                        raise ValueError(
+                            f"No data fetched for {stock_symbol}. "
+                            f"Yahoo Finance may not have data for this symbol with interval={interval}. "
+                            f"Try using a different interval (e.g., '1d' instead of '15m') or a different stock."
+                        )
+                        
+                except Exception as fetch_error:
+                    logger.error(f"Data fetch failed for {stock_symbol}: {str(fetch_error)}")
+                    raise ValueError(
+                        f"Failed to fetch data for {stock_symbol}: {str(fetch_error)}. "
+                        f"This stock may not be available on Yahoo Finance or the interval '{interval}' "
+                        f"may not be supported. Try: 1) Use interval='1d', 2) Try a different stock like RELIANCE, "
+                        f"3) Check if data already exists in database."
+                    )
                 
                 # Now compute features and labels for each symbol
                 self.update_state(state='PROGRESS', meta={
@@ -157,7 +189,7 @@ def train_model(
                     # Get historical candles
                     candles = db.query(HistoricalCandle).filter(
                         HistoricalCandle.instrument_id == instrument_obj.id,
-                        HistoricalCandle.timeframe == '1d'
+                        HistoricalCandle.timeframe == interval  # Use user-selected interval
                     ).order_by(HistoricalCandle.ts_utc).all()
                     
                     # DATA VALIDATION: Check for sufficient candles
@@ -349,9 +381,9 @@ def train_model(
             
             if auc >= settings.MODEL_MIN_AUC and accuracy >= settings.MODEL_MIN_ACCURACY:
                 should_activate = True
-                logger.info(f\"Model meets quality thresholds (AUC: {auc:.4f}, Accuracy: {accuracy:.4f}) - auto-activating\")
+                logger.info(f"Model meets quality thresholds (AUC: {auc:.4f}, Accuracy: {accuracy:.4f}) - auto-activating")
             else:
-                logger.info(f\"Model below thresholds (AUC: {auc:.4f} < {settings.MODEL_MIN_AUC}, Accuracy: {accuracy:.4f} < {settings.MODEL_MIN_ACCURACY}) - manual activation required\")
+                logger.info(f"Model below thresholds (AUC: {auc:.4f} < {settings.MODEL_MIN_AUC}, Accuracy: {accuracy:.4f} < {settings.MODEL_MIN_ACCURACY}) - manual activation required")
         
         # Save to database with stock_symbol
         model_record = Model(
@@ -414,6 +446,13 @@ def _train_lstm(df, model_name, hyperparams, task):
     task.update_state(state='PROGRESS', meta={'status': 'Initializing LSTM neural network...', 'progress': 35})
     
     lstm = LSTMPredictor()
+    
+    # Validate sufficient data
+    if len(df) < 200:
+        raise ValueError(
+            f"LSTM needs at least 200 samples. Got {len(df)}. "
+            f"Try: 1) Use longer date range, 2) Use daily (1d) interval, 3) Use XGBoost instead"
+        )
     
     # Prepare sequences
     task.update_state(state='PROGRESS', meta={'status': 'Creating time-series sequences...', 'progress': 45})
@@ -501,6 +540,22 @@ def _train_transformer(df, model_name, hyperparams, task):
     epochs = hyperparams.get('n_estimators', 100)  # Reuse n_estimators
     batch_size = hyperparams.get('batch_size', 32)
     
+    # CRITICAL: Auto-adjust sequence length based on available data
+    min_samples_needed = seq_length * 10  # Need at least 10x seq_length for training
+    if len(X_train) < min_samples_needed:
+        # Reduce sequence length to fit available data
+        new_seq_length = max(5, len(X_train) // 20)  # At least 5, prefer 1/20 of data
+        logger.warning(f"Insufficient samples ({len(X_train)}) for seq_length={seq_length}. Reducing to {new_seq_length}")
+        seq_length = new_seq_length
+    
+    # Validate minimum samples
+    if len(X_train) < 100:
+        raise ValueError(
+            f"Transformer needs at least 100 samples. Got {len(X_train)}. "
+            f"Try: 1) Use longer date range, 2) Use daily (1d) interval instead of 15m, "
+            f"3) Use XGBoost which works with smaller datasets"
+        )
+    
     # Initialize transformer
     transformer = TransformerPredictor(
         seq_length=seq_length,
@@ -529,14 +584,24 @@ def _train_transformer(df, model_name, hyperparams, task):
     
     logger.info(f"Sequences prepared - Train: {X_train_seq.shape}, Val: {X_val_seq.shape}, Test: {X_test_seq.shape}")
     
-    # Train model
+    # Train model with error handling
     task.update_state(state='PROGRESS', meta={'status': 'Training Transformer network', 'progress': 70})
-    history = transformer.train(
-        X_train_seq, y_train_seq,
-        X_val_seq, y_val_seq,
-        epochs=epochs,
-        batch_size=batch_size
-    )
+    try:
+        history = transformer.train(
+            X_train_seq, y_train_seq,
+            X_val_seq, y_val_seq,
+            epochs=epochs,
+            batch_size=batch_size
+        )
+        logger.info("✓ Transformer training completed successfully")
+    except Exception as train_error:
+        logger.error(f"Transformer training failed: {str(train_error)}")
+        raise ValueError(
+            f"Transformer training failed: {str(train_error)}. "
+            f"This may be due to: 1) Insufficient GPU memory (need 4-8GB), "
+            f"2) Data quality issues, 3) TensorFlow/CUDA errors. "
+            f"Try: 1) Use XGBoost instead, 2) Use daily (1d) data, 3) Reduce num_layers to 2"
+        )
     
     # Evaluate on test set
     task.update_state(state='PROGRESS', meta={'status': 'Evaluating model', 'progress': 90})
@@ -598,4 +663,9 @@ def scheduled_retrain(self):
     logger.info("Scheduled retrain started")
     
     model_name = f"auto_retrain_{datetime.utcnow().strftime('%Y%m%d')}"
-    return train_model.delay(model_name=model_name, model_type='xgboost')
+    # TODO: Make this configurable - which stock to retrain on schedule
+    return train_model.delay(
+        model_name=model_name,
+        instrument_filter="RELIANCE",  # Default to RELIANCE, make configurable later
+        model_type='xgboost'
+    )

@@ -18,6 +18,7 @@ class TrainModelRequest(BaseModel):
     model_name: str
     model_type: str = 'xgboost'  
     instrument_filter: Optional[str] = None
+    interval: str = '15m'  # Candle interval: 15m, 1h, 1d, etc.
     hyperparams: Optional[Dict[str, Any]] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -92,6 +93,36 @@ async def trigger_training(
     if request.model_type not in valid_types:
         return {"error": f"Invalid model_type. Must be one of: {valid_types}"}
     
+    # Validate interval
+    valid_intervals = ['1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo']
+    if request.interval not in valid_intervals:
+        return {"error": f"Invalid interval. Must be one of: {valid_intervals}"}
+    
+    # Validate duration limits based on interval (Yahoo Finance restrictions)
+    if request.start_date and request.end_date:
+        from datetime import datetime
+        try:
+            start = datetime.strptime(request.start_date, '%Y-%m-%d')
+            end = datetime.strptime(request.end_date, '%Y-%m-%d')
+            days = (end - start).days
+            
+            # Intraday intervals limited to 60 days
+            intraday_intervals = ['1m', '5m', '15m', '30m', '1h']
+            if request.interval in intraday_intervals and days > 60:
+                return {
+                    "error": f"Interval '{request.interval}' limited to 60 days by Yahoo Finance. Requested: {days} days",
+                    "details": f"Please use a daily interval (1d) or reduce date range to max 60 days"
+                }
+            
+            # Daily interval limited to ~2 years
+            if request.interval == '1d' and days > 730:
+                return {
+                    "error": f"Interval '1d' limited to 730 days (2 years) by Yahoo Finance. Requested: {days} days",
+                    "details": "Please use weekly/monthly interval or reduce date range"
+                }
+        except ValueError as e:
+            return {"error": f"Invalid date format: {str(e)}"}
+    
     # Check if Celery worker is available
     try:
         inspect = celery_app.control.inspect()
@@ -110,8 +141,9 @@ async def trigger_training(
     try:
         task = train_model.delay(
             model_name=request.model_name,
-            model_type=request.model_type,
             instrument_filter=request.instrument_filter,
+            model_type=request.model_type,
+            interval=request.interval,  # Pass interval to task
             hyperparams=request.hyperparams or {},
             start_date=request.start_date,
             end_date=request.end_date

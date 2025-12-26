@@ -14,6 +14,38 @@ from datetime import datetime, timedelta
 router = APIRouter()
 
 
+@router.get("/overview")
+async def get_dashboard_overview(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get quick dashboard overview statistics
+    """
+    # Count active trades
+    active_trades = db.query(Trade).filter(
+        Trade.user_id == current_user.id,
+        Trade.exit_price == None
+    ).count()
+    
+    # Count total trades
+    total_trades = db.query(Trade).filter(Trade.user_id == current_user.id).count()
+    
+    # Calculate total P&L
+    total_pnl = db.query(func.sum(Trade.pnl)).filter(
+        Trade.user_id == current_user.id,
+        Trade.pnl.isnot(None)
+    ).scalar() or 0
+    
+    return {
+        "active_trades": active_trades,
+        "total_trades": total_trades,
+        "total_pnl": float(total_pnl),
+        "paper_trading_enabled": current_user.paper_trading_enabled,
+        "auto_execute": current_user.auto_execute
+    }
+
+
 @router.get("/")
 async def get_dashboard(
     mode: str = Query("paper", regex="^(paper|live)$"),

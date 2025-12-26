@@ -120,22 +120,23 @@ def fetch_historical_kite(kite, symbol: str, from_date: datetime, to_date: datet
 
 def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval: str = '15m', exchange: str = 'NS'):
     """
-    Fetch historical data from Yahoo Finance with multi-exchange retry.
-    Tries both NSE (.NS) and BSE (.BO) automatically to maximize stock coverage.
+    Fetch historical data from Yahoo Finance using DIRECT API calls (not yfinance library).
+    Uses the exact URL pattern: https://query1.finance.yahoo.com/v8/finance/chart/{SYMBOL}.NS?interval={interval}&range={range}
     
     Args:
-        symbol: Stock symbol (e.g., 'TATAELXSI', 'HAL', 'RELIANCE')
+        symbol: Stock symbol (e.g., 'TATAELXSI', 'HCLTECH', 'RELIANCE')
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
-        interval: Interval (1m, 5m, 15m, 1h, 1d)
-        exchange: Primary exchange to try first ('NS' for NSE or 'BO' for BSE)
+        interval: Interval (15m, 1h, 1d)
+        exchange: Primary exchange ('NS' for NSE or 'BO' for BSE)
     
     Returns:
         DataFrame with OHLCV data, or None if all attempts fail
     """
-    from app.utils.yfinance_wrapper import get_rate_limiter
+    import requests
+    from datetime import datetime
     
-    # Build list of exchanges to try - primary first, then fallback
+    # Build list of exchanges to try
     exchanges_to_try = []
     if exchange == 'NS':
         exchanges_to_try = ['NS', 'BO']  # Try NSE first, fallback to BSE
@@ -144,36 +145,78 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
     else:
         exchanges_to_try = ['NS', 'BO']  # Default: try both
     
-    rate_limiter = get_rate_limiter()
+    # Calculate range from dates
+    if start_date and end_date:
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        days = (end_dt - start_dt).days
+        range_param = f'{days}d'
+    else:
+        # Default ranges based on interval
+        intraday = ['1m', '5m', '15m', '30m', '1h']
+        range_param = '60d' if interval in intraday else '365d'
+    
     last_error = None
     
     for exch in exchanges_to_try:
         yahoo_symbol = f"{symbol}.{exch}"
         
+        # Construct the exact URL pattern that works
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?interval={interval}&range={range_param}"
+        
         try:
-            logger.info(f"Attempting Yahoo Finance: {yahoo_symbol}")
+            logger.info(f"Attempting Yahoo Finance: {url}")
             
-            df = rate_limiter.download(
-                yahoo_symbol,
-                start=start_date,
-                end=end_date,
-                interval=interval,
-                progress=False,
-                auto_adjust=False
-            )
+            # Direct HTTP request
+            response = requests.get(url, timeout=30)
             
-            # Check if data was returned
-            if df is not None and not df.empty:
-                # CRITICAL FIX: Normalize column names to lowercase
-                # yfinance returns capitalized columns (Open, High, Low, Close, Volume)
-                # but code expects lowercase (open, high, low, close, volume)
-                df.columns = df.columns.str.lower()
+            if response.status_code == 200:
+                data = response.json()
                 
-                logger.info(f"✓ Successfully fetched {len(df)} candles from {yahoo_symbol}")
-                return df
+                # Check if we got valid data
+                if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+                    result = data['chart']['result'][0]
+                    
+                    if 'timestamp' not in result or not result['timestamp']:
+                        logger.warning(f"⚠ {yahoo_symbol} returned no timestamps")
+                        last_error = "No timestamps in response"
+                        continue
+                    
+                    timestamps = result['timestamp']
+                    quotes = result['indicators']['quote'][0]
+                    
+                    # Build DataFrame
+                    df_data = []
+                    for i, ts in enumerate(timestamps):
+                        # Skip rows with null values
+                        if quotes['close'][i] is None:
+                            continue
+                        
+                        df_data.append({
+                            'timestamp': datetime.fromtimestamp(ts),
+                            'open': float(quotes['open'][i]) if quotes['open'][i] else 0,
+                            'high': float(quotes['high'][i]) if quotes['high'][i] else 0,
+                            'low': float(quotes['low'][i]) if quotes['low'][i] else 0,
+                            'close': float(quotes['close'][i]),
+                            'volume': int(quotes['volume'][i]) if quotes['volume'][i] else 0
+                        })
+                    
+                    if not df_data:
+                        logger.warning(f"⚠ {yahoo_symbol} returned no valid data rows")
+                        last_error = "No valid data rows"
+                        continue
+                    
+                    df = pd.DataFrame(df_data)
+                    df.set_index('timestamp', inplace=True)
+                    
+                    logger.info(f"✓ Successfully fetched {len(df)} candles from {yahoo_symbol}")
+                    return df
+                else:
+                    logger.warning(f"⚠ {yahoo_symbol} returned invalid response structure")
+                    last_error = "Invalid response structure"
             else:
-                logger.warning(f"⚠ {yahoo_symbol} returned no data")
-                last_error = f"No data available"
+                logger.warning(f"⚠ {yahoo_symbol} HTTP status {response.status_code}")
+                last_error = f"HTTP {response.status_code}"
         
         except Exception as e:
             logger.warning(f"⚠ {yahoo_symbol} failed: {str(e)}")
