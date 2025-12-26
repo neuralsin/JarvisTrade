@@ -66,6 +66,20 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def decode_token(token: str):
+    """
+    Decode and validate JWT token.
+    Used by WebSocket endpoint for authentication.
+    
+    Returns:
+        dict: Decoded token payload
+    
+    Raises:
+        JWTError: If token is invalid or expired
+    """
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -162,15 +176,75 @@ async def get_kite_login_url(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/kite/callback")
-async def kite_callback(request_token: str, status: str, db: Session = Depends(get_db)):
+async def kite_callback(
+    request_token: str,
+    status: str,
+    db: Session = Depends(get_db)
+):
     """
-    OAuth callback from Kite
-    """
-    # Note: In production, verify the request token and generate access token
-    # This is a simplified implementation
-    logger.info(f"Kite OAuth callback received: {request_token}, status: {status}")
+    Complete Kite OAuth flow - exchange request_token for access_token
     
-    return {"status": "success", "message": "Kite authentication successful"}
+    Flow:
+    1. User gets redirected here after Kite login
+    2. We receive request_token from Kite
+    3. Exchange request_token for access_token using API secret
+    4. Store encrypted access_token in database
+    """
+    try:
+        if status != "success":
+            logger.error(f"Kite OAuth failed with status: {status}")
+            raise HTTPException(status_code=400, detail="Kite authentication failed")
+        
+        logger.info(f"Kite OAuth callback received: request_token={request_token[:10]}..., status={status}")
+        
+        # Get the first user (for now - in production you'd extract user_id from state param)
+        user = db.query(User).first()
+        if not user:
+            logger.error("No user found in database")
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check if user has Kite credentials stored
+        if not user.kite_api_key_encrypted or not user.kite_api_secret_encrypted:
+            logger.error(f"User {user.email} has no Kite credentials")
+            raise HTTPException(
+                status_code=400,
+                detail="Kite API credentials not found. Please save them first."
+            )
+        
+        # Decrypt user's API credentials
+        api_key = decrypt_text(user.kite_api_key_encrypted)
+        api_secret = decrypt_text(user.kite_api_secret_encrypted)
+        
+        # Initialize Kite and exchange request_token for access_token
+        from kiteconnect import KiteConnect
+        kite = KiteConnect(api_key=api_key)
+        
+        logger.info(f"Generating Kite session for user {user.email}")
+        data = kite.generate_session(request_token, api_secret=api_secret)
+        access_token = data["access_token"]
+        
+        # Store encrypted access token
+        user.kite_access_token_encrypted = encrypt_text(access_token)
+        db.commit()
+        
+        logger.info(f"✅ Kite access token stored successfully for {user.email}")
+        
+        # Return success page or redirect to frontend
+        return {
+            "status": "success",
+            "message": "Kite authentication successful! You can now close this window.",
+            "user_email": user.email
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Kite OAuth callback error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to complete Kite authentication: {str(e)}"
+        )
+
 
 
 @router.get("/me")

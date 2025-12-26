@@ -42,7 +42,7 @@ async def health_check():
     }
 
 # Import and include routers
-from app.routers import auth, dashboard, trades, models, admin, settings as settings_router, buckets, backtest, options, sentiment, instruments
+from app.routers import auth, dashboard, trades, models, admin, settings as settings_router, buckets, backtest, options, sentiment, instruments, trading_controls
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -55,6 +55,48 @@ app.include_router(backtest.router, prefix="/api/v1/backtest", tags=["backtestin
 app.include_router(options.router, prefix="/api/v1/options", tags=["options"])
 app.include_router(sentiment.router, prefix="/api/v1/sentiment", tags=["sentiment"])
 app.include_router(instruments.router, prefix="/api/v1/instruments", tags=["instruments"])
+app.include_router(trading_controls.router)  # Phase 5: Trading controls
+
+# Phase 6: WebSocket endpoint for real-time signals
+from fastapi import WebSocket, WebSocketDisconnect
+from app.websocket_manager import ws_manager
+from app.routers.auth import decode_token
+
+@app.websocket("/ws/signals/{token}")
+async def websocket_signals(websocket: WebSocket, token: str):
+    """
+    WebSocket endpoint for real-time signal updates.
+    
+    Args:
+        token: JWT token for authentication
+    """
+    try:
+        # Decode token to get user
+        payload = decode_token(token)
+        user_id = payload.get("sub")
+        
+        if not user_id:
+            await websocket.close(code=1008, reason="Invalid token")
+            return
+        
+        # Connect WebSocket
+        await ws_manager.connect(user_id, websocket)
+        
+        # Keep connection alive
+        while True:
+            # Wait for messages (ping/pong)
+            data = await websocket.receive_text()
+            
+            # Echo ping as pong
+            if data == "ping":
+                await websocket.send_text("pong")
+    
+    except WebSocketDisconnect:
+        ws_manager.disconnect(user_id, websocket)
+        logger.info (f"WebSocket disconnected for user {user_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error: {str(e)}")
+        ws_manager.disconnect(user_id, websocket)
 
 @app.on_event("startup")
 async def startup_event():

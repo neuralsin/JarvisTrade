@@ -1,8 +1,9 @@
 """
-Data ingestion with smart source selection:
-- Primary: Kite API (if credentials available)
-- Fallback: Yahoo Finance (yfinance)
-- Supports: NSE & BSE
+Data ingestion from Yahoo Finance ONLY:
+- Data Source: Yahoo Finance (yfinance) for all historical data
+- Kite API: Used EXCLUSIVELY for trade execution, NOT for data
+- Supports: NSE & BSE exchanges
+- Reason: Simplifies architecture, enables model training without Kite credentials
 """
 from app.celery_app import celery_app
 from app.db.database import SessionLocal
@@ -197,25 +198,18 @@ def ingest_historical_data(
     task_instance=None
 ):
     """
-    Ingest historical data from Kite/Yahoo and save to DB
+    Ingest historical data from Yahoo Finance and save to DB.
+    
+    NOTE: Kite API is NOT used for data fetching - only for trade execution.
+    All historical data comes from Yahoo Finance regardless of Kite credential availability.
+    This ensures models can train and data can be fetched without broker dependencies.
     """
     db = SessionLocal()
     
     try:
-        # Try to get Kite client
-        kite = get_kite_client()
         
         total_candles = 0
-        source_stats = {'kite': 0, 'yahoo': 0, 'failed': 0}
-        
-        # Map interval to Kite format
-        kite_interval_map = {
-            '1m': 'minute',
-            '5m': '5minute',
-            '15m': '15minute',
-            '1h': '60minute',
-            '1d': 'day'
-        }
+        source_stats = {'yahoo': 0, 'failed': 0}  # Removed 'kite' - Yahoo only
         
         for symbol in symbols:
             try:
@@ -230,30 +224,16 @@ def ingest_historical_data(
                 else:
                     logger.info(f"Fetching {symbol} ({symbols.index(symbol)+1}/{len(symbols)})")
                 
-                df = None
-                source_used = None
-                
-                # Try Kite first if available
-                if kite:
-                    from_dt = datetime.strptime(start_date, '%Y-%m-%d')
-                    to_dt = datetime.strptime(end_date, '%Y-%m-%d')
-                    kite_interval = kite_interval_map.get(interval, '15minute')
-                    
-                    df = fetch_historical_kite(kite, symbol, from_dt, to_dt, kite_interval)
-                    if df is not None:
-                        source_used = 'kite'
-                
-                # Fallback to Yahoo Finance
-                if df is None:
-                    yahoo_exchange = 'NS' if exchange == 'NSE' else 'BO'
-                    df = fetch_historical_yahoo(symbol, start_date, end_date, interval, yahoo_exchange)
-                    if df is not None:
-                        source_used = 'yahoo'
+                # Fetch from Yahoo Finance (exclusive data source)
+                yahoo_exchange = 'NS' if exchange == 'NSE' else 'BO'
+                df = fetch_historical_yahoo(symbol, start_date, end_date, interval, yahoo_exchange)
                 
                 if df is None:
-                    logger.warning(f"Failed to fetch data for {symbol} from all sources")
+                    logger.warning(f"Failed to fetch data for {symbol} from Yahoo Finance")
                     source_stats['failed'] += 1
                     continue
+                
+                source_used = 'yahoo'
                 
                 # Update stats
                 source_stats[source_used] += 1
@@ -311,7 +291,7 @@ def ingest_historical_data(
         
         logger.info(
             f"Data fetch complete: {total_candles} candles | "
-            f"Kite: {source_stats['kite']}, Yahoo: {source_stats['yahoo']}, Failed: {source_stats['failed']}"
+            f"Yahoo: {source_stats['yahoo']}, Failed: {source_stats['failed']}"
         )
         
         return {
@@ -334,7 +314,7 @@ def fetch_historical_data(
     exchange: str = 'NSE'
 ):
     """
-    Smart historical data fetching with Kite API primary, Yahoo Finance fallback
+    Historical data fetching from Yahoo Finance (exclusive data source).
     
     Args:
         symbols: List of symbols (e.g., ['RELIANCE', 'TCS'])
@@ -342,6 +322,8 @@ def fetch_historical_data(
         end_date: End date (YYYY-MM-DD)
         interval: '15m', '1h', '1d'
         exchange: 'NSE' or 'BSE'
+    
+    Note: Kite API is NOT used for data - only for trade execution.
     """
     return ingest_historical_data(symbols, start_date, end_date, interval, exchange, task_instance=self)
 
@@ -449,8 +431,8 @@ def _fetch_with_retry(url: str):
 @celery_app.task(bind=True)
 def fetch_recent_data(self, interval: str = '15m'):
     """
-    Scheduled task to fetch recent data for tracked symbols
-    Uses smart source selection (Kite → Yahoo)
+    Scheduled task to fetch recent data for tracked symbols.
+    Uses Yahoo Finance exclusively for all data.
     """
     # Top NIFTY 50 stocks
     symbols = [

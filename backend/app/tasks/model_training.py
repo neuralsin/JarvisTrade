@@ -20,30 +20,45 @@ logger = logging.getLogger(__name__)
 @celery_app.task(bind=True)
 def train_model(
     self, 
-    model_name: str, 
+    model_name: str,
+    stock_symbol: str,  # Phase 3: Required - which stock to train on
     model_type: str = 'xgboost',
-    instrument_filter: str = None, 
     hyperparams: dict = None,
     start_date: str = None,
     end_date: str = None
 ):
     """
     Spec 5: Train ML model with full pipeline
+    Phase 3: Stock-specific model training (one model per stock)
     
     Args:
         model_name: Name for the model
+        stock_symbol: Stock symbol to train on (e.g., 'RELIANCE') - REQUIRED
         model_type: 'xgboost', 'lstm', or 'transformer'
-        instrument_filter: Optional symbol filter (e.g., 'RELIANCE')
         hyperparams: Optional hyperparameter overrides
         start_date: Training start date (YYYY-MM-DD), defaults to 2 years ago
         end_date: Training end date (YYYY-MM-DD), defaults to today
+    
+    Returns:
+        Dict with model_id, metrics, and stock_symbol
     """
     db = SessionLocal()
     task_id = self.request.id
     
     try:
-        logger.info(f"Starting {model_type} model training: {model_name} (task: {task_id})")
-        self.update_state(state='PROGRESS', meta={'status': 'Initializing training pipeline...', 'progress': 5})
+        # Phase 3: Validate stock_symbol is provided
+        if not stock_symbol:
+            raise ValueError(
+                "stock_symbol is required for model training. "
+                "Each model must be trained on a specific stock. "
+                "Example: stock_symbol='RELIANCE'"
+            )
+        
+        # Normalize stock symbol
+        stock_symbol = stock_symbol.strip().upper()
+        
+        logger.info(f"Starting {model_type} model training for {stock_symbol}: {model_name} (task: {task_id})")
+        self.update_state(state='PROGRESS', meta={'status': f'Initializing training for {stock_symbol}...', 'progress': 5})
         
         # Set default date range based on actual data in DB
         if not end_date or not start_date:
@@ -69,13 +84,13 @@ def train_model(
                     start_date = start_dt.strftime('%Y-%m-%d')
                 logger.warning(f"No features in DB, using fallback dates: {start_date} to {end_date}")
         
-        self.update_state(state='PROGRESS', meta={'status': f'Loading data from {start_date} to {end_date}...', 'progress': 10})
+        self.update_state(state='PROGRESS', meta={'status': f'Loading data for {stock_symbol} from {start_date} to {end_date}...', 'progress': 10})
         
-        # Load feature data with date filtering
+        # Phase 3: Load feature data for specific stock only
         query = db.query(Feature).join(Instrument)
         
-        if instrument_filter:
-            query = query.filter(Instrument.symbol == instrument_filter)
+        # CRITICAL: Filter by stock_symbol (required for Phase 3)
+        query = query.filter(Instrument.symbol == stock_symbol)
         
         # Apply date range
         query = query.filter(
@@ -96,26 +111,21 @@ def train_model(
             try:
                 from app.tasks.data_ingestion import ingest_historical_data
                 from app.ml.labeler import generate_labels
+        
+        # Determine which symbols to fetch
+        # Phase 3: Only fetch the specific stock we're training on
+        symbols_to_fetch = [stock_symbol]
                 
-                # Determine which symbols to fetch
-                if instrument_filter:
-                    symbols_to_fetch = [instrument_filter]
-                else:
-                    # Get all instrument symbols
-                    all_instruments = db.query(Instrument.symbol).all()
-                    symbols_to_fetch = [i.symbol for i in all_instruments] if all_instruments else []
                 
-                if not symbols_to_fetch:
-                    raise ValueError("No instruments found in database. Please add instruments first.")
-                
-                logger.info(f"Auto-fetching data for {len(symbols_to_fetch)} symbol(s): {symbols_to_fetch}")
+                logger.info(f"Auto-fetching data for {stock_symbol}")
                 
                 # Fetch 6 months of daily data from Yahoo Finance
                 auto_end = datetime.utcnow().strftime('%Y-%m-%d')
                 auto_start = (datetime.utcnow() - timedelta(days=180)).strftime('%Y-%m-%d')
                 
+                
                 self.update_state(state='PROGRESS', meta={
-                    'status': f'Fetching historical data from Yahoo Finance for {len(symbols_to_fetch)} instrument(s)...',
+                    'status': f'Fetching historical data from Yahoo Finance for {stock_symbol}...',
                     'progress': 15
                 })
                 
@@ -331,28 +341,43 @@ def train_model(
         else:  # xgboost
             metrics, model_path = _train_xgboost(df, model_name, hyperparams, self)
         
-        # Save to database
+        # Phase 1: Auto-activate model if it meets quality thresholds
+        should_activate = False
+        if settings.AUTO_ACTIVATE_MODELS:
+            auc = metrics.get('auc_roc', 0)
+            accuracy = metrics.get('test_accuracy', metrics.get('accuracy', 0))
+            
+            if auc >= settings.MODEL_MIN_AUC and accuracy >= settings.MODEL_MIN_ACCURACY:
+                should_activate = True
+                logger.info(f\"Model meets quality thresholds (AUC: {auc:.4f}, Accuracy: {accuracy:.4f}) - auto-activating\")
+            else:
+                logger.info(f\"Model below thresholds (AUC: {auc:.4f} < {settings.MODEL_MIN_AUC}, Accuracy: {accuracy:.4f} < {settings.MODEL_MIN_ACCURACY}) - manual activation required\")
+        
+        # Save to database with stock_symbol
         model_record = Model(
             name=model_name,
             model_type=model_type,
             model_path=model_path,
+            stock_symbol=stock_symbol,  # Phase 3: Store which stock this model is for
             trained_at=datetime.utcnow(),
             metrics_json=metrics,
-            is_active=False  # Manually activate later
+            is_active=should_activate  # Auto-activate if quality is good
         )
         db.add(model_record)
         db.commit()
         
-        logger.info(f"Model training complete: {model_name} (AUC: {metrics.get('auc_roc', 0):.4f})")
+        logger.info(f"Model training complete for {stock_symbol}: {model_name} (AUC: {metrics.get('auc_roc', 0):.4f})")
         
         return {
             "status": "success",
             "model_id": str(model_record.id),
             "model_name": model_name,
             "model_type": model_type,
+            "stock_symbol": stock_symbol,  # Phase 3: Return which stock
             "metrics": metrics,
             "date_range": f"{start_date} to {end_date}",
-            "samples": len(df)
+            "samples": len(df),
+            "auto_activated": should_activate
         }
     
     except Exception as e:

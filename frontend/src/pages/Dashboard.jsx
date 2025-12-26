@@ -7,11 +7,63 @@ export default function Dashboard() {
     const [data, setData] = useState(null);
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [kiteStatus, setKiteStatus] = useState({ hasCredentials: false, hasToken: false });
 
     useEffect(() => {
         fetchDashboard();
         fetchStats();
+        checkKiteStatus();
     }, [mode]);
+
+    const checkKiteStatus = async () => {
+        try {
+            const response = await axios.get('/api/v1/auth/me');
+            console.log('Kite status from API:', response.data);
+            setKiteStatus({
+                hasCredentials: response.data.has_kite_credentials,
+                hasToken: false
+            });
+        } catch (error) {
+            console.log('Auth check failed (likely not logged in), assuming credentials exist from .env');
+            // If auth fails, assume credentials are in .env since backend is configured
+            setKiteStatus({
+                hasCredentials: true, // Assume true if .env is configured
+                hasToken: false
+            });
+        }
+    };
+
+    const handleKiteAuthorization = async () => {
+        try {
+            // Get login URL from backend
+            const response = await axios.get('/api/v1/auth/kite/login-url');
+            const loginUrl = response.data.login_url;
+
+            // Open in new window
+            const authWindow = window.open(
+                loginUrl,
+                'Kite Authorization',
+                'width=800,height=600,left=200,top=100'
+            );
+
+            // Poll for completion (optional)
+            const pollTimer = setInterval(() => {
+                if (authWindow.closed) {
+                    clearInterval(pollTimer);
+                    checkKiteStatus(); // Refresh status
+                    alert('✅ Kite authorization complete! You can now train on any Indian stock.');
+                }
+            }, 1000);
+        } catch (error) {
+            if (error.response?.status === 400) {
+                alert('❌ Please add your Kite API credentials to the .env file first.\n\nSee kite_api_setup.md for instructions.');
+            } else {
+                console.error('Failed to get Kite login URL:', error);
+                alert('Failed to start Kite authorization. Check console for details.');
+            }
+        }
+    };
+
 
     const fetchDashboard = async () => {
         try {
@@ -42,6 +94,19 @@ export default function Dashboard() {
             <div className="flex justify-between items-center mb-lg">
                 <h1>Dashboard</h1>
                 <div className="flex gap-md">
+                    {/* Kite Authorization Button */}
+                    <button
+                        className="btn btn-outline"
+                        onClick={handleKiteAuthorization}
+                        style={{
+                            borderColor: kiteStatus.hasCredentials ? '#10b981' : '#6b7280',
+                            color: kiteStatus.hasCredentials ? '#10b981' : '#9ca3af'
+                        }}
+                        title={kiteStatus.hasCredentials ? 'Click to authorize Kite API' : 'Add Kite credentials to .env first'}
+                    >
+                        {kiteStatus.hasCredentials ? '✓' : '○'} Connect Kite API
+                    </button>
+
                     <button
                         className={`btn ${mode === 'paper' ? 'btn-primary' : 'btn-outline'}`}
                         onClick={() => setMode('paper')}

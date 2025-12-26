@@ -42,6 +42,10 @@ celery_app.conf.beat_schedule = {
         'task': 'app.tasks.data_ingestion.fetch_recent_data',
         'schedule': crontab(minute='*/15'),  # Every 15 minutes
     },
+    'compute-fresh-features': {  # Phase 1: Real-time features
+        'task': 'app.tasks.fresh_features.compute_fresh_features',
+        'schedule': 60.0,  # Every 60 seconds (respects rate limits via caching)
+    },
     'check-signals': {
         'task': 'app.tasks.execution.check_and_execute_signals',
         'schedule': 60.0,  # Every 60 seconds for ultra-fast peak detection

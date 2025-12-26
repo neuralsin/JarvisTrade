@@ -1,11 +1,13 @@
 """
 Spec 1: SQLAlchemy ORM models matching database schema
+Phase 2: Added SignalLog for real-time signal tracking
 """
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text, CheckConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
+from app.db.signal_log import SignalLog  # Phase 2: Import signal log model
 import uuid
 
 
@@ -19,7 +21,12 @@ class User(Base):
     kite_api_secret_encrypted = Column(Text)
     kite_access_token_encrypted = Column(Text)
     kite_request_token = Column(Text)
-    auto_execute = Column(Boolean, default=False)
+    auto_execute = Column(Boolean, default=True)  # Phase 1: Changed to True for paper trading
+    
+    # Phase 2: Multi-model and trading controls
+    selected_model_ids = Column(JSONB, default=list)  # List of active model UUIDs
+    paper_trading_enabled = Column(Boolean, default=True)  # Paper trading master switch
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -97,6 +104,10 @@ class Model(Base):
     name = Column(Text, nullable=False)
     model_type = Column(Text, default='xgboost')
     model_path = Column(Text)
+    
+    # Phase 2: Stock-specific model tracking
+    stock_symbol = Column(Text, nullable=True)  # Stock this model is trained on (e.g., 'RELIANCE')
+    
     trained_at = Column(DateTime(timezone=True), server_default=func.now())
     metrics_json = Column(JSONB)
     is_active = Column(Boolean, default=False)
@@ -195,3 +206,19 @@ class NewsSentiment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     instrument = relationship("Instrument", back_populates="sentiments")
+
+
+# Phase 2: Export all models for proper discovery
+__all__ = [
+    'User',
+    'Instrument',
+    'HistoricalCandle',
+    'Feature',
+    'Model',
+    'Trade',
+    'TradeLog',
+    'SystemState',
+    'EquitySnapshot',
+    'NewsSentiment',
+    'SignalLog',  # Phase 2
+]

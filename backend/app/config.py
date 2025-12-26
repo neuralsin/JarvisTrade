@@ -36,9 +36,19 @@ class Settings(BaseSettings):
     MAX_DAILY_LOSS: float = 0.02
     STOP_MULTIPLIER: float = 1.5
     TARGET_MULTIPLIER: float = 2.5
-    PROB_MIN: float = 0.65
-    PROB_STRONG: float = 0.75
+    PROB_MIN: float = 0.50  # Lowered from 0.65 for more signals (Phase 1)
+    PROB_STRONG: float = 0.70  # Adjusted accordingly
     MAX_TRADES_PER_DAY: int = 3
+    
+    # Model auto-activation (Phase 1)
+    AUTO_ACTIVATE_MODELS: bool = True  # Auto-activate models with good metrics
+    MODEL_MIN_AUC: float = 0.60  # Minimum AUC to auto-activate
+    MODEL_MIN_ACCURACY: float = 0.55  # Minimum accuracy to auto-activate
+    
+    # Feature computation (Phase 1)
+    FEATURE_CACHE_SECONDS: int = 60  # Cache features for 60 seconds
+    FEATURE_MAX_AGE_SECONDS: int = 120  # Reject features older than 2 minutes
+    FRESH_FEATURES_ENABLED: bool = True  # Enable real-time feature computation
     
     # Slippage simulation
     SLIPPAGE_PCT_MIN: float = 0.0001

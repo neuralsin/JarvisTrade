@@ -22,6 +22,9 @@ import Settings from './pages/Settings';
 import Portfolio from './pages/Portfolio';
 import Help from './pages/Help';
 import ManageStocks from './pages/ManageStocks';
+import KiteSetup from './pages/KiteSetup';
+import TradingControls from './pages/TradingControls';  // Phase 5
+import SignalMonitor from './pages/SignalMonitor';  // Phase 6
 import Layout from './components/Layout';
 
 function App() {
@@ -100,6 +103,9 @@ function App() {
             <BrowserRouter>
                 <Routes>
                     <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+                    {/* Public Kite Setup Route */}
+                    <Route path="/kite-setup" element={<KiteSetup />} />
+
                     <Route
                         path="/"
                         element={user ? <Layout /> : <Navigate to="/login" />}
@@ -111,6 +117,8 @@ function App() {
                         <Route path="models" element={<Models />} />
                         <Route path="trades" element={<Trades />} />
                         <Route path="stocks" element={<ManageStocks />} />
+                        <Route path="trading-controls" element={<TradingControls />} />  {/* Phase 5 */}
+                        <Route path="signal-monitor" element={<SignalMonitor />} />  {/* Phase 6 */}
                         <Route path="help" element={<Help />} />
                         <Route path="settings" element={<Settings />} />
                     </Route>
