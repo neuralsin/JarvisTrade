@@ -46,6 +46,21 @@ celery_app.conf.beat_schedule = {
         'task': 'app.tasks.fresh_features.compute_fresh_features',
         'schedule': 60.0,  # Every 60 seconds (respects rate limits via caching)
     },
+    # ✅ NEW: Signal generation task
+    'generate-signals': {
+        'task': 'app.tasks.signal_generation.generate_signals',
+        'schedule': 60.0,  # Every 60 seconds
+    },
+    # ✅ NEW: Execute paper trades from signals
+    'execute-paper-trades': {
+        'task': 'app.tasks.paper_trading.execute_paper_trades',
+        'schedule': 60.0,  # Every 60 seconds
+    },
+    # ✅ NEW: Monitor open paper trades
+    'monitor-paper-trades': {
+        'task': 'app.tasks.paper_trading.monitor_paper_trades',
+        'schedule': 30.0,  # Every 30 seconds
+    },
     'check-signals': {
         'task': 'app.tasks.execution.check_and_execute_signals',
         'schedule': 60.0,  # Every 60 seconds for ultra-fast peak detection

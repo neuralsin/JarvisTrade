@@ -109,7 +109,7 @@ def compute_fresh_features(self, instruments: list = None):
                 needs_fetch = True
                 if candles:
                     latest_candle = max(candles, key=lambda c: c.ts_utc)
-                    hours_old = (datetime.utcnow() - latest_candle.ts_utc).total_seconds() / 3600
+                    hours_old = (datetime.utcnow() - latest_candle.ts_utc.replace(tzinfo=None)).total_seconds() / 3600
                     if hours_old < 24:
                         needs_fetch = False
                 
@@ -215,7 +215,7 @@ def compute_fresh_features(self, instruments: list = None):
                 # Check if we already have a recent feature (< FEATURE_MAX_AGE_SECONDS)
                 recent_feature = db.query(Feature).filter(
                     Feature.instrument_id == instrument.id,
-                    Feature.ts_utc >= datetime.utcnow() - timedelta(seconds=settings.FEATURE_MAX_AGE_SECONDS)
+                    Feature.ts_utc >= datetime.utcnow().replace(tzinfo=None) - timedelta(seconds=settings.FEATURE_MAX_AGE_SECONDS)
                 ).first()
                 
                 if recent_feature:

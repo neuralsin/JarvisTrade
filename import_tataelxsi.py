@@ -120,16 +120,14 @@ try:
     except Exception as e:
         print(f"✗ Error with 15m data: {e}")
     
-    # 3. Fetch and import 1d data (365 days / 1 year) - matching your working URL
+    # 3. Fetch and import 1d data (2 years = 730 days)
     print("\n" + "="*80)
-    print("FETCHING 1d DATA (365 days / 1 year)")
+    print("FETCHING 1d DATA (730 days / 2 years)")
     print("="*80)
     
     try:
-        # Use the EXACT format from your working URL
         ticker_1d = yf.Ticker("TATAELXSI.NS")
-        print("  Calling: ticker.history(period='365d', interval='1d')")
-        df_1d = ticker_1d.history(period='365d', interval='1d')
+        df_1d = ticker_1d.history(period='730d', interval='1d')
         
         if df_1d.empty:
             print("✗ No 1d data available from Yahoo Finance")

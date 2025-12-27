@@ -38,7 +38,7 @@ def execute_sell_signal(trade, probability, reason, db):
     
     # Update trade record
     trade.exit_price = exit_price
-    trade.exit_ts = datetime.utcnow()
+    trade.exit_ts = datetime.utcnow().replace(tzinfo=None)
     trade.status = 'closed'
     trade.pnl = pnl
     trade.exit_reason = reason

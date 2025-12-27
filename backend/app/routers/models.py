@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.db.database import get_db
-from app.db.models import User, Model
+from app.db.models import User, Model, Instrument
 from app.routers.auth import get_current_user
 from typing import Optional, Dict, Any
 import logging
@@ -137,16 +137,33 @@ async def trigger_training(
         logger.error(f"Failed to check Celery worker status: {str(e)}")
         # Continue anyway - the task will queue even if we can't check worker status
     
+    # Validate stock/instrument filter is provided
+    if not request.instrument_filter:
+        return {
+            "error": "instrument_filter is required. Specify which stock to train on (e.g., 'RELIANCE', 'TATAELXSI')"
+        }
+    
+    # Validate instrument exists in database
+    instrument = db.query(Instrument).filter(
+        Instrument.symbol == request.instrument_filter.upper()
+    ).first()
+    
+    if not instrument:
+        return {
+            "error": f"Instrument '{request.instrument_filter}' not found. Add it first in Manage Stocks."
+        }
+    
     # Queue training task
     try:
+        # Trigger training task with ALL required parameters
         task = train_model.delay(
-            model_name=request.model_name,
-            instrument_filter=request.instrument_filter,
+            model_name=request.model_name or f"auto_{request.model_type}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
             model_type=request.model_type,
-            interval=request.interval,  # Pass interval to task
-            hyperparams=request.hyperparams or {},
+            instrument_filter=request.instrument_filter.upper(),  # ✅ CRITICAL: Pass this!
+            interval=request.interval, # Pass interval to task
             start_date=request.start_date,
-            end_date=request.end_date
+            end_date=request.end_date,
+            hyperparams=request.hyperparams or {}
         )
         
         logger.info(f"Training task queued: {task.id} for model {request.model_name} (type: {request.model_type})")

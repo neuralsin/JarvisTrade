@@ -136,7 +136,7 @@ async def add_instrument(
         }
         
         days, interval = period_map.get(request.data_period, (59, '15m'))
-        start_date = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d')
+        start_date = (datetime.utcnow().replace(tzinfo=None) - timedelta(days=days)).strftime('%Y-%m-%d')
         
         task = fetch_historical_data.delay(
             symbols=[instrument.symbol],

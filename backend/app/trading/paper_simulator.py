@@ -121,7 +121,7 @@ class PaperSimulator:
         if current_high >= target:
             exit_price = target
             slippage = self.calculate_slippage(exit_price)
-            filled_price = exit_price + slippage  # Slippage in our favor on target
+            filled_price = exit_price - slippage  # ✅ FIXED: Slippage works AGAINST us (harder to hit target)
             commission = self.calculate_commission(filled_price, qty)
             
             pnl = (filled_price - entry_price) * qty - commission

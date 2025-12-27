@@ -13,6 +13,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import logging
 import os  # CRITICAL: needed for model saving
+from app.config import settings  # CRITICAL: needed for auto-activation thresholds
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ def train_model(
                 if not end_date:
                     end_date = datetime.utcnow().strftime('%Y-%m-%d')
                 if not start_date:
-                    start_dt = datetime.utcnow() - timedelta(days=730)
+                    start_dt = datetime.utcnow().replace(tzinfo=None) - timedelta(days=730)
                     start_date = start_dt.strftime('%Y-%m-%d')
                 logger.warning(f"No features in DB, using fallback dates: {start_date} to {end_date}")
         
@@ -131,46 +132,20 @@ def train_model(
                 intraday_intervals = ['1m', '5m', '15m', '30m', '1h']
                 if interval in intraday_intervals:
                     # Intraday: max 60 days
-                    auto_start = (datetime.utcnow() - timedelta(days=60)).strftime('%Y-%m-%d')
+                    auto_start = (datetime.utcnow().replace(tzinfo=None) - timedelta(days=60)).strftime('%Y-%m-%d')
                     logger.info(f"Using 60-day range for intraday interval {interval}")
                 else:
                     # Daily/Weekly/Monthly: can go back further
-                    auto_start = (datetime.utcnow() - timedelta(days=365)).strftime('%Y-%m-%d')
+                    auto_start = (datetime.utcnow().replace(tzinfo=None) - timedelta(days=365)).strftime('%Y-%m-%d')
                     logger.info(f"Using 365-day range for interval {interval}")
                 
-                
                 self.update_state(state='PROGRESS', meta={
-                    'status': f'Fetching historical data from Yahoo Finance for {stock_symbol}...',
+                    'status': f'Fetching historical data for {stock_symbol} using Groww/Yahoo...',
                     'progress': 15
                 })
                 
-                # Call data ingestion with error handling
-                try:
-                    ingest_result = ingest_historical_data(
-                        symbols=symbols_to_fetch,
-                        start_date=auto_start,
-                        end_date=auto_end,
-                        interval=interval,  # Use user-selected interval
-                        exchange='NSE'
-                    )
-                    
-                    logger.info(f"Data ingestion complete: {ingest_result.get('total_candles', 0)} candles")
-                    
-                    if ingest_result.get('total_candles', 0) == 0:
-                        raise ValueError(
-                            f"No data fetched for {stock_symbol}. "
-                            f"Yahoo Finance may not have data for this symbol with interval={interval}. "
-                            f"Try using a different interval (e.g., '1d' instead of '15m') or a different stock."
-                        )
-                        
-                except Exception as fetch_error:
-                    logger.error(f"Data fetch failed for {stock_symbol}: {str(fetch_error)}")
-                    raise ValueError(
-                        f"Failed to fetch data for {stock_symbol}: {str(fetch_error)}. "
-                        f"This stock may not be available on Yahoo Finance or the interval '{interval}' "
-                        f"may not be supported. Try: 1) Use interval='1d', 2) Try a different stock like RELIANCE, "
-                        f"3) Check if data already exists in database."
-                    )
+                # NOTE: Actual data fetch happens in the loop below using fetch_with_fallback
+                # which handles Groww API + Yahoo Finance fallback correctly
                 
                 # Now compute features and labels for each symbol
                 self.update_state(state='PROGRESS', meta={
@@ -184,54 +159,55 @@ def train_model(
                 for symbol in symbols_to_fetch:
                     instrument_obj = db.query(Instrument).filter(Instrument.symbol == symbol).first()
                     if not instrument_obj:
-                        continue
-                    
-                    # Get historical candles
-                    candles = db.query(HistoricalCandle).filter(
-                        HistoricalCandle.instrument_id == instrument_obj.id,
-                        HistoricalCandle.timeframe == interval  # Use user-selected interval
-                    ).order_by(HistoricalCandle.ts_utc).all()
-                    
-                    # DATA VALIDATION: Check for sufficient candles
-                    MIN_CANDLES = 200  # Need 200+ for EMA200 calculation
-                    if not candles:
-                        logger.warning(f"No candles found for {symbol} after ingestion")
-                        fetch_stats['failed'].append(symbol)
-                        continue
-                    
-                    if len(candles) < MIN_CANDLES:
-                        logger.warning(
-                            f"Insufficient candles for {symbol}: {len(candles)} (need {MIN_CANDLES}+ for feature computation)"
+                        # AUTO-CREATE instrument if it doesn't exist
+                        logger.info(f"Creating instrument record for {symbol}")
+                        instrument_obj = Instrument(
+                            symbol=symbol,
+                            name=symbol,
+                            exchange='NSE',
+                            instrument_type='EQ'
                         )
-                        fetch_stats['insufficient_data'].append(f"{symbol} ({len(candles)} candles)")
-                        continue
+                        db.add(instrument_obj)
+                        db.commit()
+                        db.refresh(instrument_obj)
+                        logger.info(f"✓ Created instrument {symbol} with ID {instrument_obj.id}")
                     
-                    # Convert to DataFrame
-                    candle_data = [{
-                        'ts_utc': c.ts_utc,
-                        'open': c.open,
-                        'high': c.high,
-                        'low': c.low,
-                        'close': c.close,
-                        'volume': c.volume
-                    } for c in candles]
-                    
-                    df = pd.DataFrame(candle_data)
-                    
-                    # Compute features
-                    df_with_features = compute_features(df, instrument_id=str(instrument_obj.id), db_session=db)
-                    
-                    # Generate labels
-                    df_labeled = generate_labels(df_with_features)
-                    
-                    # Store features in database
-                    for idx, row in df_labeled.iterrows():
-                        if pd.isna(row.get('target')):
+                    # ✅ PRIMARY: Fetch data using Groww API with Yahoo fallback
+                    try:
+                        from app.utils.groww_api import fetch_with_fallback
+                        logger.info(f"Fetching {interval} data for {symbol}")
+                        
+                        # Calculate days between dates
+                        from datetime import datetime as dt
+                        days = (dt.strptime(end_date, '%Y-%m-%d') - dt.strptime(start_date, '%Y-%m-%d')).days
+                        
+                        df = fetch_with_fallback(
+                            symbol=symbol,
+                            interval=interval,
+                            days=days
+                        )
+                        
+                        if df.empty:
+                            logger.warning(f"No data fetched for {symbol}")
+                            fetch_stats['failed'].append(symbol)
                             continue
                         
-                        feature_dict = {
-                            'returns_1': row.get('returns_1'),
-                            'returns_5': row.get('returns_5'),
+                        logger.info(f"✓ Fetched {len(df)} candles for {symbol}")
+                        
+                        # Compute features
+                        df_with_features = compute_features(df, instrument_id=str(instrument_obj.id), db_session=db)
+                        
+                        # Generate labels
+                        df_labeled = generate_labels(df_with_features)
+                        
+                        # Store features in database
+                        for idx, row in df_labeled.iterrows():
+                            if pd.isna(row.get('target')):
+                                continue
+                            
+                            feature_dict = {
+                                'returns_1': row.get('returns_1'),
+                                'returns_5': row.get('returns_5'),
                             'ema_20': row.get('ema_20'),
                             'ema_50': row.get('ema_50'),
                             'ema_200': row.get('ema_200'),
@@ -262,10 +238,16 @@ def train_model(
                                 target=int(row['target'])
                             )
                             db.add(feature_record)
+                        
+                        db.commit()
+                        fetch_stats['success'].append(symbol)
+                        logger.info(f"✓ Stored {len(df_labeled)} features for {symbol}")
                     
-                    db.commit()
-                    fetch_stats['success'].append(symbol)
-                    logger.info(f"✓ Computed and stored features for {symbol}")
+                    except Exception as e:
+                        logger.error(f"Failed to fetch/process {symbol}: {str(e)}")
+                        fetch_stats['failed'].append(symbol)
+                        db.rollback()
+                        continue
                 
                 # Report fetch statistics
                 logger.info(
@@ -287,7 +269,6 @@ def train_model(
                 
                 if not features_data:
                     error_msg = f"Auto-fetch completed but no usable features generated.\n"
-                    error_msg += f"Total candles fetched: {ingest_result.get('total_candles', 0)}\n"
                     error_msg += f"Successfully processed: {len(fetch_stats['success'])} instruments\n"
                     error_msg += f"Failed: {len(fetch_stats['failed'])} instruments\n"
                     error_msg += f"Insufficient data: {len(fetch_stats['insufficient_data'])} instruments\n"
@@ -385,6 +366,28 @@ def train_model(
             else:
                 logger.info(f"Model below thresholds (AUC: {auc:.4f} < {settings.MODEL_MIN_AUC}, Accuracy: {accuracy:.4f} < {settings.MODEL_MIN_ACCURACY}) - manual activation required")
         
+        # ✅ FIX: Convert all numpy types to native Python for JSON serialization
+        import json
+        import numpy as np
+        def convert_to_native(obj):
+            """Convert numpy types to native Python types for JSON"""
+            if isinstance(obj, dict):
+                return {k: convert_to_native(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_to_native(item) for item in obj]
+            elif isinstance(obj, (np.integer, np.int64, np.int32)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64, np.float32)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, (np.bool_, bool)):
+                return bool(obj)
+            else:
+                return obj
+        
+        metrics_clean = convert_to_native(metrics)
+        
         # Save to database with stock_symbol
         model_record = Model(
             name=model_name,
@@ -392,7 +395,7 @@ def train_model(
             model_path=model_path,
             stock_symbol=stock_symbol,  # Phase 3: Store which stock this model is for
             trained_at=datetime.utcnow(),
-            metrics_json=metrics,
+            metrics_json=metrics_clean,  # ✅ Use cleaned metrics
             is_active=should_activate  # Auto-activate if quality is good
         )
         db.add(model_record)
@@ -446,13 +449,6 @@ def _train_lstm(df, model_name, hyperparams, task):
     task.update_state(state='PROGRESS', meta={'status': 'Initializing LSTM neural network...', 'progress': 35})
     
     lstm = LSTMPredictor()
-    
-    # Validate sufficient data
-    if len(df) < 200:
-        raise ValueError(
-            f"LSTM needs at least 200 samples. Got {len(df)}. "
-            f"Try: 1) Use longer date range, 2) Use daily (1d) interval, 3) Use XGBoost instead"
-        )
     
     # Prepare sequences
     task.update_state(state='PROGRESS', meta={'status': 'Creating time-series sequences...', 'progress': 45})
@@ -540,22 +536,6 @@ def _train_transformer(df, model_name, hyperparams, task):
     epochs = hyperparams.get('n_estimators', 100)  # Reuse n_estimators
     batch_size = hyperparams.get('batch_size', 32)
     
-    # CRITICAL: Auto-adjust sequence length based on available data
-    min_samples_needed = seq_length * 10  # Need at least 10x seq_length for training
-    if len(X_train) < min_samples_needed:
-        # Reduce sequence length to fit available data
-        new_seq_length = max(5, len(X_train) // 20)  # At least 5, prefer 1/20 of data
-        logger.warning(f"Insufficient samples ({len(X_train)}) for seq_length={seq_length}. Reducing to {new_seq_length}")
-        seq_length = new_seq_length
-    
-    # Validate minimum samples
-    if len(X_train) < 100:
-        raise ValueError(
-            f"Transformer needs at least 100 samples. Got {len(X_train)}. "
-            f"Try: 1) Use longer date range, 2) Use daily (1d) interval instead of 15m, "
-            f"3) Use XGBoost which works with smaller datasets"
-        )
-    
     # Initialize transformer
     transformer = TransformerPredictor(
         seq_length=seq_length,
@@ -584,24 +564,14 @@ def _train_transformer(df, model_name, hyperparams, task):
     
     logger.info(f"Sequences prepared - Train: {X_train_seq.shape}, Val: {X_val_seq.shape}, Test: {X_test_seq.shape}")
     
-    # Train model with error handling
+    # Train model
     task.update_state(state='PROGRESS', meta={'status': 'Training Transformer network', 'progress': 70})
-    try:
-        history = transformer.train(
-            X_train_seq, y_train_seq,
-            X_val_seq, y_val_seq,
-            epochs=epochs,
-            batch_size=batch_size
-        )
-        logger.info("✓ Transformer training completed successfully")
-    except Exception as train_error:
-        logger.error(f"Transformer training failed: {str(train_error)}")
-        raise ValueError(
-            f"Transformer training failed: {str(train_error)}. "
-            f"This may be due to: 1) Insufficient GPU memory (need 4-8GB), "
-            f"2) Data quality issues, 3) TensorFlow/CUDA errors. "
-            f"Try: 1) Use XGBoost instead, 2) Use daily (1d) data, 3) Reduce num_layers to 2"
-        )
+    history = transformer.train(
+        X_train_seq, y_train_seq,
+        X_val_seq, y_val_seq,
+        epochs=epochs,
+        batch_size=batch_size
+    )
     
     # Evaluate on test set
     task.update_state(state='PROGRESS', meta={'status': 'Evaluating model', 'progress': 90})
@@ -663,9 +633,13 @@ def scheduled_retrain(self):
     logger.info("Scheduled retrain started")
     
     model_name = f"auto_retrain_{datetime.utcnow().strftime('%Y%m%d')}"
-    # TODO: Make this configurable - which stock to retrain on schedule
+    
+    # Get stock from config or database
+    from app.config import settings
+    stock_symbol = getattr(settings, 'DEFAULT_RETRAIN_STOCK', 'RELIANCE')
+    
     return train_model.delay(
         model_name=model_name,
-        instrument_filter="RELIANCE",  # Default to RELIANCE, make configurable later
+        instrument_filter=stock_symbol,  # ✅ FIXED: Use config, default RELIANCE
         model_type='xgboost'
     )

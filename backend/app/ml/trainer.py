@@ -104,17 +104,43 @@ class ModelTrainer:
     
     def train(self, X_train, y_train, X_val, y_val):
         """
-        Train XGBoost model with early stopping and class weight handling
+        Train XGBoost model for MULTI-CLASS classification (HOLD/BUY/SELL)
         """
-        # Calculate scale_pos_weight to handle class imbalance
-        neg_count = (y_train == 0).sum()
-        pos_count = (y_train == 1).sum()
+        # Check number of unique classes
+        n_classes = len(np.unique(y_train))
+        logger.info(f"Training for {n_classes} classes: {sorted(np.unique(y_train))}")
         
-        if pos_count > 0:
-            scale_pos_weight = neg_count / pos_count
-            logger.info(f"Class imbalance detected: {neg_count} negative, {pos_count} positive samples")
-            logger.info(f"Using scale_pos_weight={scale_pos_weight:.2f} to balance classes")
-            self.hyperparams['scale_pos_weight'] = scale_pos_weight
+        # Configure for multi-class if we have 3 classes (HOLD/BUY/SELL)
+        if n_classes == 3:
+            logger.info("Detected 3-class problem (HOLD/BUY/SELL). Using multi:softprob objective.")
+            self.hyperparams['objective'] = 'multi:softprob'
+            self.hyperparams['num_class'] = 3
+            self.hyperparams['eval_metric'] = 'mlogloss'
+            # Remove scale_pos_weight - not applicable for multi-class
+            self.hyperparams.pop('scale_pos_weight', None)
+            
+            # Log class distribution
+            for cls in [0, 1, 2]:
+                count = (y_train == cls).sum()
+                label = ['HOLD', 'BUY', 'SELL'][cls]
+                logger.info(f"  Class {cls} ({label}): {count} samples ({count/len(y_train)*100:.1f}%)")
+        
+        elif n_classes == 2:
+            # Binary classification (backward compatibility)
+            logger.info("Detected 2-class problem. Using binary:logistic objective.")
+            self.hyperparams['objective'] = 'binary:logistic'
+            self.hyperparams['eval_metric'] = 'logloss'
+            
+            # Handle class imbalance for binary
+            neg_count = (y_train == 0).sum()
+            pos_count = (y_train == 1).sum()
+            if pos_count > 0:
+                scale_pos_weight = neg_count / pos_count
+                logger.info(f"Class imbalance: {neg_count} negative, {pos_count} positive")
+                logger.info(f"Using scale_pos_weight={scale_pos_weight:.2f}")
+                self.hyperparams['scale_pos_weight'] = scale_pos_weight
+        else:
+            raise ValueError(f"Unsupported number of classes: {n_classes}. Expected 2 or 3.")
         
         model = XGBClassifier(**self.hyperparams)
         
@@ -125,59 +151,99 @@ class ModelTrainer:
             verbose=False
         )
         
-        logger.info(f"Model trained. Best iteration: {model.best_iteration}")
+        logger.info(f"✓ Model trained. Best iteration: {model.best_iteration}")
         return model
     
     def evaluate(self, model, X, y, feature_cols) -> Dict:
         """
-        Spec 5: Compute metrics including AUC, precision@k, F1, SHAP
-        Updated to use 0.3 cutoff for predictions instead of 0.5
+        Compute metrics for both binary and multi-class models
         """
-        y_pred_proba = model.predict_proba(X)[:, 1]
-        # Use 0.3 threshold instead of 0.5 to generate more trading signals
-        y_pred = (y_pred_proba >= 0.3).astype(int)
+        n_classes = len(np.unique(y))
         
-        # Basic metrics
-        auc = roc_auc_score(y, y_pred_proba)
-        f1 = f1_score(y, y_pred)
+        if n_classes == 3:
+            # Multi-class: predict probabilities for each class
+            y_pred_proba = model.predict_proba(X)  # Shape: (n_samples, 3)
+            y_pred = model.predict(X)  # Direct class predictions
+            
+            # For multi-class AUC, use one-vs-rest
+            try:
+                from sklearn.preprocessing import label_binarize
+                from sklearn.metrics import roc_auc_score
+                y_bin = label_binarize(y, classes=[0, 1, 2])
+                auc = roc_auc_score(y_bin, y_pred_proba, multi_class='ovr', average='weighted')
+            except Exception as e:  # ✅ FIXED: Proper exception handling
+                logger.warning(f"Multi-class AUC calculation failed: {str(e)}. Using accuracy instead")
+                auc = (y_pred == y).mean()
+            
+            # Multi-class F1
+            f1 = f1_score(y, y_pred, average='weighted')
+            
+            # Confusion matrix for multi-class
+            cm = confusion_matrix(y, y_pred)
+            logger.info(f"Confusion Matrix:\n{cm}")
+            
+            # Precision for BUY class (most important)
+            buy_precision = precision_score(y, y_pred, labels=[1], average='micro', zero_division=0)
+            
+            metrics = {
+                "auc_roc": float(auc),
+                "f1": float(f1),
+                "accuracy": float((y_pred == y).mean()),
+                "buy_precision": float(buy_precision),
+                "confusion_matrix": cm.tolist(),
+                "class_distribution": {
+                    "HOLD": int((y_pred == 0).sum()),
+                    "BUY": int((y_pred == 1).sum()),
+                    "SELL": int((y_pred == 2).sum())
+                }
+            }
         
-        # Precision at top 10% probability
-        threshold = np.quantile(y_pred_proba, 0.9)
-        high_prob_mask = y_pred_proba >= threshold
-        if high_prob_mask.sum() > 0:
-            precision_at_k = precision_score(y[high_prob_mask], y_pred[high_prob_mask])
         else:
-            precision_at_k = 0
+            # Binary classification (original logic)
+            y_pred_proba = model.predict_proba(X)[:, 1]
+            y_pred = (y_pred_proba >= 0.3).astype(int)
+            
+            auc = roc_auc_score(y, y_pred_proba)
+            f1 = f1_score(y, y_pred)
+            
+            # Precision at top 10%
+            threshold = np.quantile(y_pred_proba, 0.9)
+            high_prob_mask = y_pred_proba >= threshold
+            precision_at_k = precision_score(y[high_prob_mask], y_pred[high_prob_mask]) if high_prob_mask.sum() > 0 else 0
+            
+            # Confusion matrix
+            tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
+            
+            metrics = {
+                "auc_roc": float(auc),
+                "precision_at_k": float(precision_at_k),
+                "f1": float(f1),
+                "true_positives": int(tp),
+                "false_positives": int(fp),
+                "true_negatives": int(tn),
+                "false_negatives": int(fn)
+            }
         
-        # Confusion matrix
-        tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
-        
-        # SHAP feature importance
+        # SHAP feature importance (works for both)
         try:
             explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(X.iloc[:min(1000, len(X))])  # Sample for speed
+            shap_values = explainer.shap_values(X.iloc[:min(1000, len(X))])
             
-            # Mean absolute SHAP values
+            if n_classes == 3:
+                # For multi-class, average across classes
+                shap_avg = np.abs(shap_values).mean(axis=(0, 2)) if len(np.array(shap_values).shape) == 3 else np.abs(shap_values).mean(axis=0)
+            else:
+                shap_avg = np.abs(shap_values).mean(axis=0)
+            
             feature_importance = pd.DataFrame({
                 'feature': feature_cols,
-                'importance': np.abs(shap_values).mean(axis=0)
+                'importance': shap_avg
             }).sort_values('importance', ascending=False).head(15)
             
-            top_features = feature_importance.to_dict('records')
+            metrics['top_features'] = feature_importance.to_dict('records')
         except Exception as e:
             logger.warning(f"SHAP calculation failed: {str(e)}")
-            top_features = []
-        
-        metrics = {
-            "auc_roc": float(auc),
-            "precision_at_k": float(precision_at_k),
-            "f1": float(f1),
-            "true_positives": int(tp),
-            "false_positives": int(fp),
-            "true_negatives": int(tn),
-            "false_negatives": int(fn),
-            "top_features": top_features
-        }
+            metrics['top_features'] = []
         
         return metrics
     

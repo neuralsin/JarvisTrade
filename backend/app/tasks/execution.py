@@ -152,7 +152,7 @@ def _check_signals_for_model(db, user, model_record):
         ).order_by(Feature.ts_utc.desc()).first()
         
         if latest_feature:
-            age_seconds = (datetime.utcnow() - latest_feature.ts_utc).total_seconds()
+            age_seconds = (datetime.utcnow() - latest_feature.ts_utc.replace(tzinfo=None)).total_seconds()
             logger.info(f"      \ud83d\udcc5 Feature age: {age_seconds:.0f}s")
             
             if age_seconds > settings.FEATURE_MAX_AGE_SECONDS:

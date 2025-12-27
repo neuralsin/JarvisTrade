@@ -82,7 +82,7 @@ async def get_sentiment_by_symbol(
     if not instrument:
         return {"error": f"Instrument {symbol} not found"}
     
-    cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+    cutoff_date = datetime.utcnow().replace(tzinfo=None) - timedelta(days=days_back)
     
     sentiments = db.query(NewsSentiment).filter(
         NewsSentiment.instrument_id == instrument.id,

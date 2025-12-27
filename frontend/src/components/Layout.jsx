@@ -10,6 +10,8 @@ export default function Layout() {
         { path: '/paper-trading', label: 'Paper Trading', icon: '📝' },
         { path: '/live-trading', label: 'Live Trading', icon: '⚡' },
         { path: '/models', label: 'Models', icon: '🤖' },
+        { path: '/trading-controls', label: 'Trading Controls', icon: '🎮' },
+        { path: '/signal-monitor', label: 'Signal Monitor', icon: '📡' },
         { path: '/trades', label: 'Trades', icon: '💹' },
         { path: '/stocks', label: 'Manage Stocks', icon: '📈' },
         { path: '/help', label: 'Help', icon: '📚' },

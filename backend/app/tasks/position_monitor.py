@@ -121,7 +121,7 @@ def _close_position(trade, exit_price, reason, db):
     pnl = (exit_price - float(trade.entry_price)) * trade.qty
     
     trade.exit_price = exit_price
-    trade.exit_ts = datetime.utcnow()
+    trade.exit_ts = datetime.utcnow().replace(tzinfo=None)
     trade.status = 'closed'
     trade.pnl = pnl
     trade.exit_reason = reason

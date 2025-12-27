@@ -29,7 +29,7 @@ def detect_model_drift(self):
         training_metrics = active_model.metrics_json
         
         # Get recent production data (last 30 days)
-        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        cutoff_date = datetime.utcnow().replace(tzinfo=None) - timedelta(days=30)
         recent_features = db.query(Feature).filter(
             Feature.ts_utc >= cutoff_date
         ).limit(1000).all()

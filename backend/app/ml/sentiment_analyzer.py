@@ -61,7 +61,7 @@ class NewsSentimentAnalyzer:
         """
         Fetch news from NewsAPI
         """
-        end_date = datetime.utcnow()
+        end_date = datetime.utcnow().replace(tzinfo=None)
         start_date = end_date - timedelta(days=days_back)
         
         url = "https://newsapi.org/v2/everything"
@@ -111,7 +111,7 @@ class NewsSentimentAnalyzer:
             })
         
         # Calculate rolling averages
-        now = datetime.utcnow()
+        now = datetime.utcnow().replace(tzinfo=None)
         
         def avg_sentiment_window(days):
             cutoff = now - timedelta(days=days)

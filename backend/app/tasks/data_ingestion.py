@@ -10,11 +10,9 @@ from app.db.database import SessionLocal
 from app.db.models import Instrument, HistoricalCandle, User
 from app.utils.retry import retry_with_backoff
 from app.utils.crypto import decrypt_text
-from app.utils.yfinance_wrapper import get_rate_limiter
 from app.config import settings
 from datetime import datetime, timedelta
-import yfinance as yf
-import requests
+import requests  # Direct HTTP for Yahoo Finance
 import pandas as pd
 from io import BytesIO
 from zipfile import ZipFile
@@ -118,13 +116,14 @@ def fetch_historical_kite(kite, symbol: str, from_date: datetime, to_date: datet
         return None
 
 
+
 def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval: str = '15m', exchange: str = 'NS'):
     """
-    Fetch historical data from Yahoo Finance using DIRECT API calls (not yfinance library).
+    Fetch historical data from Yahoo Finance using DIRECT HTTP (no yfinance library).
     Uses the exact URL pattern: https://query1.finance.yahoo.com/v8/finance/chart/{SYMBOL}.NS?interval={interval}&range={range}
     
     Args:
-        symbol: Stock symbol (e.g., 'TATAELXSI', 'HCLTECH', 'RELIANCE')
+        symbol: Stock symbol (e.g., 'TATAELXSI', 'HAL', 'RELIANCE')
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
         interval: Interval (15m, 1h, 1d)
@@ -134,6 +133,7 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
         DataFrame with OHLCV data, or None if all attempts fail
     """
     import requests
+    import time
     from datetime import datetime
     
     # Build list of exchanges to try
@@ -164,64 +164,78 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
         # Construct the exact URL pattern that works
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?interval={interval}&range={range_param}"
         
-        try:
-            logger.info(f"Attempting Yahoo Finance: {url}")
-            
-            # Direct HTTP request
-            response = requests.get(url, timeout=30)
-            
-            if response.status_code == 200:
-                data = response.json()
+        # Retry loop for 429/rate limits
+        for attempt in range(3):
+            try:
+                logger.info(f"Attempting Yahoo Finance: {url} (Try {attempt+1}/3)")
                 
-                # Check if we got valid data
-                if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
-                    result = data['chart']['result'][0]
+                # Direct HTTP request with User-Agent
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+                response = requests.get(url, headers=headers, timeout=30)
+                
+                if response.status_code == 200:
+                    data = response.json()
                     
-                    if 'timestamp' not in result or not result['timestamp']:
-                        logger.warning(f"⚠ {yahoo_symbol} returned no timestamps")
-                        last_error = "No timestamps in response"
-                        continue
-                    
-                    timestamps = result['timestamp']
-                    quotes = result['indicators']['quote'][0]
-                    
-                    # Build DataFrame
-                    df_data = []
-                    for i, ts in enumerate(timestamps):
-                        # Skip rows with null values
-                        if quotes['close'][i] is None:
-                            continue
+                    # Check if we got valid data
+                    if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+                        result = data['chart']['result'][0]
                         
-                        df_data.append({
-                            'timestamp': datetime.fromtimestamp(ts),
-                            'open': float(quotes['open'][i]) if quotes['open'][i] else 0,
-                            'high': float(quotes['high'][i]) if quotes['high'][i] else 0,
-                            'low': float(quotes['low'][i]) if quotes['low'][i] else 0,
-                            'close': float(quotes['close'][i]),
-                            'volume': int(quotes['volume'][i]) if quotes['volume'][i] else 0
-                        })
-                    
-                    if not df_data:
-                        logger.warning(f"⚠ {yahoo_symbol} returned no valid data rows")
-                        last_error = "No valid data rows"
-                        continue
-                    
-                    df = pd.DataFrame(df_data)
-                    df.set_index('timestamp', inplace=True)
-                    
-                    logger.info(f"✓ Successfully fetched {len(df)} candles from {yahoo_symbol}")
-                    return df
+                        if 'timestamp' not in result or not result['timestamp']:
+                            logger.warning(f"⚠ {yahoo_symbol} returned no timestamps")
+                            last_error = "No timestamps in response"
+                            break  # Don't retry, try next exchange
+                        
+                        timestamps = result['timestamp']
+                        quotes = result['indicators']['quote'][0]
+                        
+                        # Build DataFrame
+                        df_data = []
+                        for i, ts in enumerate(timestamps):
+                            # Skip rows with null values
+                            if quotes['close'][i] is None:
+                                continue
+                            
+                            df_data.append({
+                                'timestamp': datetime.fromtimestamp(ts),
+                                'open': float(quotes['open'][i]) if quotes['open'][i] else 0,
+                                'high': float(quotes['high'][i]) if quotes['high'][i] else 0,
+                                'low': float(quotes['low'][i]) if quotes['low'][i] else 0,
+                                'close': float(quotes['close'][i]),
+                                'volume': int(quotes['volume'][i]) if quotes['volume'][i] else 0
+                            })
+                        
+                        if not df_data:
+                            logger.warning(f"⚠ {yahoo_symbol} returned no valid data rows")
+                            last_error = "No valid data rows"
+                            break  # Try next exchange
+                        
+                        df = pd.DataFrame(df_data)
+                        df.set_index('timestamp', inplace=True)
+                        
+                        logger.info(f"✓ Successfully fetched {len(df)} candles from {yahoo_symbol}")
+                        return df
+                    else:
+                        logger.warning(f"⚠ {yahoo_symbol} returned invalid response structure")
+                        last_error = "Invalid response structure"
+                        break  # Try next exchange
+                        
+                elif response.status_code == 429:
+                    logger.warning(f"⚠ Rate limit 429 for {yahoo_symbol}. Waiting 5s...")
+                    time.sleep(5)
+                    continue  # Retry
                 else:
-                    logger.warning(f"⚠ {yahoo_symbol} returned invalid response structure")
-                    last_error = "Invalid response structure"
-            else:
-                logger.warning(f"⚠ {yahoo_symbol} HTTP status {response.status_code}")
-                last_error = f"HTTP {response.status_code}"
+                    logger.warning(f"⚠ {yahoo_symbol} HTTP status {response.status_code}")
+                    last_error = f"HTTP {response.status_code}"
+                    break  # Try next exchange
+                
+            except Exception as e:
+                logger.warning(f"⚠ {yahoo_symbol} failed: {str(e)}")
+                last_error = str(e)
+                time.sleep(2)  # Small wait on error
+                # Continue to retry
         
-        except Exception as e:
-            logger.warning(f"⚠ {yahoo_symbol} failed: {str(e)}")
-            last_error = str(e)
-            continue
+        # If we successfully returned already, we won't reach here
+        # If we broke out of retry loop, continue to next exchange
     
     # All exchanges exhausted
     logger.error(
@@ -230,6 +244,7 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
         f"Last error: {last_error}"
     )
     return None
+
 
 
 def ingest_historical_data(
@@ -381,7 +396,7 @@ def fetch_eod_bhavcopy(self, date_str: str = None):
     
     try:
         if not date_str:
-            yesterday = datetime.utcnow() - timedelta(days=1)
+            yesterday = datetime.utcnow().replace(tzinfo=None) - timedelta(days=1)
             date_str = yesterday.strftime("%Y%m%d")
         
         # NSE bhavcopy URL
@@ -484,7 +499,7 @@ def fetch_recent_data(self, interval: str = '15m'):
     ]
     
     end_date = datetime.utcnow().strftime('%Y-%m-%d')
-    start_date = (datetime.utcnow() - timedelta(days=5)).strftime('%Y-%m-%d')
+    start_date = (datetime.utcnow().replace(tzinfo=None) - timedelta(days=5)).strftime('%Y-%m-%d')
     
     return fetch_historical_data(symbols, start_date, end_date, interval, 'NSE')
 

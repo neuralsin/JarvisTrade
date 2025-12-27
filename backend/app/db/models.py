@@ -24,7 +24,7 @@ class User(Base):
     auto_execute = Column(Boolean, default=True)  # Phase 1: Changed to True for paper trading
     
     # Phase 2: Multi-model and trading controls
-    selected_model_ids = Column(JSONB, default=list)  # List of active model UUIDs
+    selected_model_ids = Column(JSONB, default=lambda: [])  # ✅ FIXED: Callable default to avoid mutable default bug
     paper_trading_enabled = Column(Boolean, default=True)  # Paper trading master switch
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

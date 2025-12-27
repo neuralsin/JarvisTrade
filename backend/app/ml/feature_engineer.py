@@ -105,7 +105,7 @@ def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = 
             from datetime import datetime, timedelta
             
             # Get latest sentiment data (within last 7 days)
-            cutoff_date = datetime.utcnow() - timedelta(days=7)
+            cutoff_date = datetime.utcnow().replace(tzinfo=None) - timedelta(days=7)  # ✅ Make timezone-naive
             latest_sentiment = db_session.query(NewsSentiment).filter(
                 NewsSentiment.instrument_id == instrument_id,
                 NewsSentiment.ts_utc >= cutoff_date

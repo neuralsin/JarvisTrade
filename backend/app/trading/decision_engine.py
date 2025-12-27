@@ -110,14 +110,38 @@ class DecisionEngine:
         if trade_count >= self.max_trades_per_day:
             return {"action": "NO_TRADE", "reason": "MAX_TRADES_PER_DAY", "prob": None}
         
-        # Predict probability
+        # Predict - Handle both binary and multi-class models
         X = features_to_dataframe(feature_json)
-        prob = model.predict_proba(X)[0][1]
+        proba = model.predict_proba(X)[0]
         
-        # Spec 6: Probability threshold
-        if prob < self.prob_min:
-            return {"action": "NO_TRADE", "reason": "PROB_BELOW_THRESHOLD", "prob": float(prob)}
-        
+        # Detect model type by probability array shape
+        if len(proba) == 3:
+            # Multi-class model (HOLD/BUY/SELL)
+            # proba = [HOLD_prob, BUY_prob, SELL_prob]
+            predicted_class = int(model.predict(X)[0])
+            confidence = float(proba[predicted_class])
+            
+            # Map class to action
+            class_to_action = {0: "HOLD", 1: "BUY", 2: "SELL"}
+            action_type = class_to_action.get(predicted_class, "HOLD")
+            
+            # For multi-class, we check BUY or SELL confidence
+            if action_type == "HOLD" or confidence < self.prob_min:
+                return {"action": "NO_TRADE", "reason": "LOW_CONFIDENCE", "prob": float(confidence), "predicted_class": action_type}
+            
+            # Use the confidence of the predicted action
+            prob = confidence
+            
+        elif len(proba) == 2:
+            # Binary model (old style)
+            prob = float(proba[1])  # BUY probability
+            action_type = "BUY"
+            
+            # Spec 6: Probability threshold
+            if prob < self.prob_min:
+                return {"action": "NO_TRADE", "reason": "PROB_BELOW_THRESHOLD", "prob": prob}
+        else:
+            raise ValueError(f"Unexpected probability shape: {len(proba)}. Expected 2 (binary) or 3 (multi-class)")
         
         # Market safety check - comprehensive validation
         market_safety = self._check_market_safety(feature_json)
