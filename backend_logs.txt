@@ -1,0 +1,159 @@
+﻿docker : Field "model_name" 
+has conflict with protected 
+namespace "model_".
+At line:1 char:1
++ docker logs 
+jarvistrade_backend --tail 
+50 2>&1 | Out-File 
+-Encoding u ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (Field  
+   "model_na...space "mod   
+ el_".:String) [], Remot    
+eException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+
+You may be able to resolve 
+this warning by setting `mod
+el_config['protected_namespa
+ces'] = ()`.
+INFO:     Started server 
+process [162]
+INFO:     Waiting for 
+application startup.
+INFO:     Application 
+startup complete.
+INFO:     Shutting down
+INFO:     Waiting for 
+application shutdown.
+Γ£ô Configuration validated for development environment
+{"ts": "2025-12-27T16:32:16.948063Z", "level": "INFO", "service": "jarvistrade-backend", "message": "JarvisTrade backend starting in development mode"}
+{"ts": "2025-12-27T16:33:01.513691Z", "level": "INFO", "service": "jarvistrade-backend", "message": "JarvisTrade backend shutting down"}
+INFO:     Application 
+shutdown complete.
+INFO:     Finished server 
+process [162]
+INFO:     Will watch for 
+changes in these 
+directories: ['/app']
+INFO:     Uvicorn running 
+on http://0.0.0.0:8000 
+(Press CTRL+C to quit)
+INFO:     Started reloader 
+process [1] using WatchFiles
+/usr/local/lib/python3.11/si
+te-packages/pydantic/_intern
+al/_fields.py:149: 
+UserWarning: Field 
+"model_name" has conflict 
+with protected namespace 
+"model_".
+
+You may be able to resolve 
+this warning by setting `mod
+el_config['protected_namespa
+ces'] = ()`.
+  warnings.warn(
+/usr/local/lib/python3.11/si
+te-packages/pydantic/_intern
+al/_fields.py:149: 
+UserWarning: Field 
+"model_type" has conflict 
+with protected namespace 
+"model_".
+
+You may be able to resolve 
+this warning by setting `mod
+el_config['protected_namespa
+ces'] = ()`.
+  warnings.warn(
+2025-12-27 16:33:09.420079: 
+I tensorflow/core/util/port.
+cc:113] oneDNN custom 
+operations are on. You may 
+see slightly different 
+numerical results due to 
+floating-point round-off 
+errors from different 
+computation orders. To turn 
+them off, set the 
+environment variable 
+`TF_ENABLE_ONEDNN_OPTS=0`.
+2025-12-27 16:33:09.462925: 
+E external/local_xla/xla/str
+eam_executor/cuda/cuda_dnn.c
+c:9261] Unable to register 
+cuDNN factory: Attempting 
+to register factory for 
+plugin cuDNN when one has 
+already been registered
+2025-12-27 16:33:09.462996: 
+E external/local_xla/xla/str
+eam_executor/cuda/cuda_fft.c
+c:607] Unable to register 
+cuFFT factory: Attempting 
+to register factory for 
+plugin cuFFT when one has 
+already been registered
+2025-12-27 16:33:09.464346: 
+E external/local_xla/xla/str
+eam_executor/cuda/cuda_blas.
+cc:1515] Unable to register 
+cuBLAS factory: Attempting 
+to register factory for 
+plugin cuBLAS when one has 
+already been registered
+2025-12-27 16:33:09.471845: 
+I tensorflow/core/platform/c
+pu_feature_guard.cc:182] 
+This TensorFlow binary is 
+optimized to use available 
+CPU instructions in 
+performance-critical 
+operations.
+Γ£ô Configuration validated for development environment
+To enable the following 
+instructions: AVX2 AVX_VNNI 
+FMA, in other operations, 
+rebuild TensorFlow with the 
+appropriate compiler flags.
+{"ts": "2025-12-27T16:33:12.455108Z", "level": "INFO", "service": "jarvistrade-backend", "message": "JarvisTrade backend starting in development mode"}
+INFO:     172.18.0.1:52544 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     172.18.0.1:52560 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     172.18.0.1:52560 - "GET /api/v1/models/ HTTP/1.1" 200 OK
+INFO:     172.18.0.1:52544 - "GET /api/v1/models/ HTTP/1.1" 200 OK
+2025-12-27 16:33:10.687087: 
+W tensorflow/compiler/tf2ten
+sorrt/utils/py_utils.cc:38] 
+TF-TRT Warning: Could not 
+find TensorRT
+{"ts": "2025-12-27T16:34:10.608087Z", "level": "INFO", "service": "jarvistrade-backend", "message": "Training task queued: 501db73b-49f4-48cc-822b-7bbef0276429 for model tata (type: transformer)"}
+Field "model_id" has 
+conflict with protected 
+namespace "model_".
+
+You may be able to resolve 
+this warning by setting `mod
+el_config['protected_namespa
+ces'] = ()`.
+Field "model_name" has 
+conflict with protected 
+namespace "model_".
+
+You may be able to resolve 
+this warning by setting `mod
+el_config['protected_namespa
+ces'] = ()`.
+INFO:     Started server 
+process [8]
+INFO:     Waiting for 
+application startup.
+INFO:     Application 
+startup complete.
+INFO:     172.18.0.1:40860 - "POST /api/v1/models/train HTTP/1.1" 200 OK
+INFO:     172.18.0.1:55088 - "OPTIONS /api/v1/models/task/501db73b-49f4-48cc-822b-7bbef0276429 HTTP/1.1" 200 OK
+INFO:     172.18.0.1:55088 - "GET /api/v1/models/task/501db73b-49f4-48cc-822b-7bbef0276429 HTTP/1.1" 200 OK

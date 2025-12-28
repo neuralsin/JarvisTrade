@@ -1,5 +1,11 @@
 """
-Spec 5: Model training Celery task
+Model Training Task - DETERMINISTIC VERSION
+
+Principles:
+1. One model = one stock (enforced)
+2. Explicit failure - no silent errors
+3. Unified model save with format tracking
+4. Atomic DB commit (save file, then DB)
 """
 from app.celery_app import celery_app
 from app.db.database import SessionLocal
@@ -10,448 +16,443 @@ from app.ml.feature_engineer import compute_features
 from app.ml.labeler import generate_labels
 from sqlalchemy import text
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
 import logging
-import os  # CRITICAL: needed for model saving
-from app.config import settings  # CRITICAL: needed for auto-activation thresholds
+import os
+import joblib
+from pathlib import Path
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True)
+# ============================================================================
+# CONSTANTS - Single source of truth
+# ============================================================================
+MODELS_DIR = Path("models")
+MIN_TRAINING_SAMPLES = 100
+FEATURE_COLUMNS = [
+    'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
+    'distance_from_ema200', 'rsi_14', 'rsi_slope',
+    'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
+    'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
+]
+
+
+# ============================================================================
+# MODEL SAVE/LOAD UTILITIES
+# ============================================================================
+def save_model_artifact(model, model_name: str, model_type: str, stock_symbol: str) -> tuple[str, str]:
+    """
+    Save model artifact to disk with deterministic path.
+    
+    Returns:
+        tuple: (model_path, model_format)
+    """
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    MODELS_DIR.mkdir(exist_ok=True)
+    
+    if model_type == 'xgboost':
+        # XGBoost: single joblib file
+        model_path = str(MODELS_DIR / f"{stock_symbol}_{model_name}_{timestamp}.joblib")
+        joblib.dump(model, model_path)
+        model_format = 'joblib'
+        logger.info(f"✓ Saved XGBoost model to {model_path}")
+        
+    elif model_type == 'lstm':
+        # LSTM: Keras directory
+        model_path = str(MODELS_DIR / f"{stock_symbol}_{model_name}_{timestamp}_lstm")
+        os.makedirs(model_path, exist_ok=True)
+        model.save_model(model_path)
+        model_format = 'keras'
+        logger.info(f"✓ Saved LSTM model to {model_path}")
+        
+    elif model_type == 'transformer':
+        # Transformer: Keras directory
+        model_path = str(MODELS_DIR / f"{stock_symbol}_{model_name}_{timestamp}_transformer")
+        os.makedirs(model_path, exist_ok=True)
+        model.save_model(model_path)
+        model_format = 'keras'
+        logger.info(f"✓ Saved Transformer model to {model_path}")
+        
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+    
+    # Verify file exists
+    if model_type == 'xgboost':
+        if not os.path.isfile(model_path):
+            raise IOError(f"Model file was not created: {model_path}")
+    else:
+        if not os.path.isdir(model_path):
+            raise IOError(f"Model directory was not created: {model_path}")
+    
+    return model_path, model_format
+
+
+def load_model_artifact(model_path: str, model_format: str, model_type: str):
+    """
+    Load model artifact from disk.
+    
+    Args:
+        model_path: Path to model file/directory
+        model_format: 'joblib' or 'keras'
+        model_type: 'xgboost', 'lstm', or 'transformer'
+    
+    Returns:
+        Loaded model object
+    """
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model not found: {model_path}")
+    
+    if model_format == 'joblib':
+        return joblib.load(model_path)
+    
+    elif model_format == 'keras':
+        if model_type == 'lstm':
+            from app.ml.lstm_model import LSTMPredictor
+            lstm = LSTMPredictor()
+            lstm.load_model(model_path)
+            return lstm
+        elif model_type == 'transformer':
+            from app.ml.transformer_model import TransformerPredictor
+            transformer = TransformerPredictor()
+            transformer.load_model(model_path)
+            return transformer
+    
+    raise ValueError(f"Unknown model format: {model_format}")
+
+
+# ============================================================================
+# DATA FETCHING - Yahoo Finance only
+# ============================================================================
+def fetch_training_data(
+    db,
+    stock_symbol: str,
+    interval: str,
+    start_date: str,
+    end_date: str,
+    task_callback=None
+) -> pd.DataFrame:
+    """
+    Fetch data for training from Yahoo Finance.
+    
+    Returns DataFrame with OHLCV data or raises exception.
+    """
+    from app.tasks.data_ingestion import fetch_historical_yahoo
+    
+    if task_callback:
+        task_callback.update_state(state='PROGRESS', meta={
+            'status': f'Fetching Yahoo Finance data for {stock_symbol}...',
+            'progress': 15
+        })
+    
+    # Ensure instrument exists
+    instrument = db.query(Instrument).filter(Instrument.symbol == stock_symbol).first()
+    if not instrument:
+        logger.info(f"Creating instrument record for {stock_symbol}")
+        instrument = Instrument(
+            symbol=stock_symbol,
+            name=stock_symbol,
+            exchange='NSE',
+            instrument_type='EQ'
+        )
+        db.add(instrument)
+        db.commit()
+        db.refresh(instrument)
+    
+    # Fetch from Yahoo Finance
+    logger.info(f"Fetching {interval} data for {stock_symbol}: {start_date} to {end_date}")
+    df = fetch_historical_yahoo(
+        symbol=stock_symbol,
+        start_date=start_date,
+        end_date=end_date,
+        interval=interval,
+        exchange='NS'
+    )
+    
+    if df is None or df.empty:
+        raise ValueError(
+            f"No data available for {stock_symbol} with interval={interval}. "
+            f"The symbol may not exist on Yahoo Finance (try adding .NS suffix) "
+            f"or the date range may be invalid for this interval."
+        )
+    
+    # Normalize DataFrame
+    df = df.reset_index()
+    if 'timestamp' in df.columns:
+        df = df.rename(columns={'timestamp': 'ts_utc'})
+    elif 'Datetime' in df.columns:
+        df = df.rename(columns={'Datetime': 'ts_utc'})
+    elif 'Date' in df.columns:
+        df = df.rename(columns={'Date': 'ts_utc'})
+    
+    # Normalize column names
+    df.columns = [c.lower() for c in df.columns]
+    
+    logger.info(f"✓ Fetched {len(df)} candles for {stock_symbol}")
+    return df, instrument
+
+
+# ============================================================================
+# MAIN TRAINING TASK
+# ============================================================================
+@celery_app.task(bind=True, time_limit=7200, soft_time_limit=6000)
 def train_model(
     self, 
     model_name: str,
-    instrument_filter: str,  # Changed from stock_symbol - matches API parameter name
+    instrument_filter: str,
     model_type: str = 'xgboost',
-    interval: str = '15m',  # NEW: Candle interval
+    interval: str = '15m',
     hyperparams: dict = None,
     start_date: str = None,
-    end_date: str = None
+    end_date: str = None,
+    csv_dataset_id: str = None
 ):
     """
-    Spec 5: Train ML model with full pipeline
-    Phase 3: Stock-specific model training (one model per stock)
+    Train ML model for a SINGLE stock.
+    
+    DETERMINISTIC BEHAVIOR:
+    1. Validate inputs
+    2. Fetch/load data
+    3. Compute features
+    4. Train model
+    5. Save model to disk
+    6. Save to database (atomic)
     
     Args:
         model_name: Name for the model
-        instrument_filter: Stock symbol to train on (e.g., 'RELIANCE') - REQUIRED
+        instrument_filter: Stock symbol (REQUIRED) - e.g., 'RELIANCE'
         model_type: 'xgboost', 'lstm', or 'transformer'
         interval: Candle interval ('15m', '1h', '1d', etc.)
         hyperparams: Optional hyperparameter overrides
-        start_date: Training start date (YYYY-MM-DD), defaults to 2 years ago
-        end_date: Training end date (YYYY-MM-DD), defaults to today
+        start_date: Training start date (YYYY-MM-DD)
+        end_date: Training end date (YYYY-MM-DD)
+        csv_dataset_id: Optional CSV dataset ID for training from uploaded data
     
     Returns:
         Dict with model_id, metrics, and stock_symbol
     """
     db = SessionLocal()
     task_id = self.request.id
-    
-    # Map API parameter name to internal variable name
-    stock_symbol = instrument_filter
+    stock_symbol = instrument_filter.strip().upper() if instrument_filter else None
+    hyperparams = hyperparams or {}
     
     try:
-        # Phase 3: Validate stock_symbol is provided
+        # =====================================================
+        # STEP 1: Validate inputs
+        # =====================================================
         if not stock_symbol:
             raise ValueError(
-                "instrument_filter is required for model training. "
-                "Each model must be trained on a specific stock. "
+                "instrument_filter is REQUIRED. Each model must be trained on exactly one stock. "
                 "Example: instrument_filter='RELIANCE'"
             )
         
-        # Normalize stock symbol
-        stock_symbol = stock_symbol.strip().upper()
+        logger.info(f"[{task_id}] Starting {model_type} training for {stock_symbol}: {model_name}")
+        self.update_state(state='PROGRESS', meta={
+            'status': f'Validating inputs for {stock_symbol}...',
+            'progress': 5
+        })
         
-        logger.info(f"Starting {model_type} model training for {stock_symbol}: {model_name} (task: {task_id})")
-        self.update_state(state='PROGRESS', meta={'status': f'Initializing training for {stock_symbol}...', 'progress': 5})
-        
-        # Set default date range based on actual data in DB
-        if not end_date or not start_date:
-            from sqlalchemy import func
-            # Query actual date range from features table  
-            date_range = db.query(
-                func.min(Feature.ts_utc).label('min_date'),
-                func.max(Feature.ts_utc).label('max_date')
-            ).first()
-            
-            if date_range and date_range.min_date and date_range.max_date:
-                if not start_date:
-                    start_date = date_range.min_date.strftime('%Y-%m-%d')
-                if not end_date:
-                    end_date = date_range.max_date.strftime('%Y-%m-%d')
-                logger.info(f"Using actual DB date range: {start_date} to {end_date}")
+        # Set default dates
+        if not end_date:
+            end_date = datetime.utcnow().strftime('%Y-%m-%d')
+        if not start_date:
+            # Default based on interval
+            if interval in ['1m', '5m', '15m', '30m', '1h']:
+                days_back = 59  # Yahoo Finance limit for intraday
             else:
-                # Fallback if no features exist
-                if not end_date:
-                    end_date = datetime.utcnow().strftime('%Y-%m-%d')
-                if not start_date:
-                    start_dt = datetime.utcnow().replace(tzinfo=None) - timedelta(days=730)
-                    start_date = start_dt.strftime('%Y-%m-%d')
-                logger.warning(f"No features in DB, using fallback dates: {start_date} to {end_date}")
+                days_back = 365
+            start_date = (datetime.utcnow() - timedelta(days=days_back)).strftime('%Y-%m-%d')
         
-        self.update_state(state='PROGRESS', meta={'status': f'Loading data for {stock_symbol} from {start_date} to {end_date}...', 'progress': 10})
+        logger.info(f"Date range: {start_date} to {end_date}, interval: {interval}")
         
-        # Phase 3: Load feature data for specific stock only
-        query = db.query(Feature).join(Instrument)
+        # =====================================================
+        # STEP 2: Load training data
+        # =====================================================
+        self.update_state(state='PROGRESS', meta={
+            'status': f'Loading data for {stock_symbol}...',
+            'progress': 10
+        })
         
-        # CRITICAL: Filter by stock_symbol (required for Phase 3)
-        query = query.filter(Instrument.symbol == stock_symbol)
+        if csv_dataset_id:
+            # Load from CSV
+            df, instrument = _load_csv_data(db, csv_dataset_id, stock_symbol, self)
+        else:
+            # Fetch from Yahoo Finance
+            df, instrument = fetch_training_data(
+                db, stock_symbol, interval, start_date, end_date, self
+            )
         
-        # Apply date range
-        query = query.filter(
-            Feature.ts_utc >= start_date,
-            Feature.ts_utc <= end_date
-        )
+        # =====================================================
+        # STEP 3: Compute features
+        # =====================================================
+        self.update_state(state='PROGRESS', meta={
+            'status': f'Computing features for {len(df)} candles...',
+            'progress': 25
+        })
         
-        features_data = query.all()
+        df_features = compute_features(df, str(instrument.id), db)
         
-        if not features_data:
-            # Check if there's any data at all
-            total_features = db.query(Feature).count()
-            total_instruments = db.query(Instrument).count()
-            
-            logger.warning(f"No features found. Attempting auto-fetch from Yahoo Finance...")
-            
-            # AUTO-FETCH: Dynamically fetch data from Yahoo Finance if missing
-            try:
-                from app.tasks.data_ingestion import ingest_historical_data
-                from app.ml.labeler import generate_labels
+        if df_features.empty:
+            raise ValueError(
+                f"Feature computation returned empty DataFrame. "
+                f"Need at least 200 candles for EMA200 calculation. Got: {len(df)}"
+            )
         
-                # Determine which symbols to fetch
-                # Phase 3: Only fetch the specific stock we're training on
-                symbols_to_fetch = [stock_symbol]
-                
-                
-                logger.info(f"Auto-fetching data for {stock_symbol} with interval={interval}")
-                
-                # Calculate appropriate date range based on interval
-                # Yahoo Finance limits: intraday (15m, 1h) = 60 days max, daily (1d) = 730 days max
-                auto_end = datetime.utcnow().strftime('%Y-%m-%d')
-                
-                intraday_intervals = ['1m', '5m', '15m', '30m', '1h']
-                if interval in intraday_intervals:
-                    # Intraday: max 60 days
-                    auto_start = (datetime.utcnow().replace(tzinfo=None) - timedelta(days=60)).strftime('%Y-%m-%d')
-                    logger.info(f"Using 60-day range for intraday interval {interval}")
-                else:
-                    # Daily/Weekly/Monthly: can go back further
-                    auto_start = (datetime.utcnow().replace(tzinfo=None) - timedelta(days=365)).strftime('%Y-%m-%d')
-                    logger.info(f"Using 365-day range for interval {interval}")
-                
-                self.update_state(state='PROGRESS', meta={
-                    'status': f'Fetching historical data for {stock_symbol} using Groww/Yahoo...',
-                    'progress': 15
-                })
-                
-                # NOTE: Actual data fetch happens in the loop below using fetch_with_fallback
-                # which handles Groww API + Yahoo Finance fallback correctly
-                
-                # Now compute features and labels for each symbol
-                self.update_state(state='PROGRESS', meta={
-                    'status': 'Computing features and labels...',
-                    'progress': 20
-                })
-                
-                # Track fetch statistics
-                fetch_stats = {'success': [], 'failed': [], 'insufficient_data': []}
-                
-                for symbol in symbols_to_fetch:
-                    instrument_obj = db.query(Instrument).filter(Instrument.symbol == symbol).first()
-                    if not instrument_obj:
-                        # AUTO-CREATE instrument if it doesn't exist
-                        logger.info(f"Creating instrument record for {symbol}")
-                        instrument_obj = Instrument(
-                            symbol=symbol,
-                            name=symbol,
-                            exchange='NSE',
-                            instrument_type='EQ'
-                        )
-                        db.add(instrument_obj)
-                        db.commit()
-                        db.refresh(instrument_obj)
-                        logger.info(f"✓ Created instrument {symbol} with ID {instrument_obj.id}")
-                    
-                    # ✅ PRIMARY: Fetch data using Groww API with Yahoo fallback
-                    try:
-                        from app.utils.groww_api import fetch_with_fallback
-                        logger.info(f"Fetching {interval} data for {symbol}")
-                        
-                        # Calculate days between dates
-                        from datetime import datetime as dt
-                        days = (dt.strptime(end_date, '%Y-%m-%d') - dt.strptime(start_date, '%Y-%m-%d')).days
-                        
-                        df = fetch_with_fallback(
-                            symbol=symbol,
-                            interval=interval,
-                            days=days
-                        )
-                        
-                        if df.empty:
-                            logger.warning(f"No data fetched for {symbol}")
-                            fetch_stats['failed'].append(symbol)
-                            continue
-                        
-                        logger.info(f"✓ Fetched {len(df)} candles for {symbol}")
-                        
-                        # Compute features
-                        df_with_features = compute_features(df, instrument_id=str(instrument_obj.id), db_session=db)
-                        
-                        # Generate labels
-                        df_labeled = generate_labels(df_with_features)
-                        
-                        # Store features in database
-                        for idx, row in df_labeled.iterrows():
-                            if pd.isna(row.get('target')):
-                                continue
-                            
-                            feature_dict = {
-                                'returns_1': row.get('returns_1'),
-                                'returns_5': row.get('returns_5'),
-                            'ema_20': row.get('ema_20'),
-                            'ema_50': row.get('ema_50'),
-                            'ema_200': row.get('ema_200'),
-                            'distance_from_ema200': row.get('distance_from_ema200'),
-                            'rsi_14': row.get('rsi_14'),
-                            'rsi_slope': row.get('rsi_slope'),
-                            'atr_14': row.get('atr_14'),
-                            'atr_percent': row.get('atr_percent'),
-                            'volume_ratio': row.get('volume_ratio'),
-                            'nifty_trend': row.get('nifty_trend'),
-                            'vix': row.get('vix'),
-                            'sentiment_1d': row.get('sentiment_1d', 0.0),
-                            'sentiment_3d': row.get('sentiment_3d', 0.0),
-                            'sentiment_7d': row.get('sentiment_7d', 0.0)
-                        }
-                        
-                        # Check if feature already exists
-                        existing = db.query(Feature).filter(
-                            Feature.instrument_id == instrument_obj.id,
-                            Feature.ts_utc == row['ts_utc']
-                        ).first()
-                        
-                        if not existing:
-                            feature_record = Feature(
-                                instrument_id=instrument_obj.id,
-                                ts_utc=row['ts_utc'],
-                                feature_json=feature_dict,
-                                target=int(row['target'])
-                            )
-                            db.add(feature_record)
-                        
-                        db.commit()
-                        fetch_stats['success'].append(symbol)
-                        logger.info(f"✓ Stored {len(df_labeled)} features for {symbol}")
-                    
-                    except Exception as e:
-                        logger.error(f"Failed to fetch/process {symbol}: {str(e)}")
-                        fetch_stats['failed'].append(symbol)
-                        db.rollback()
-                        continue
-                
-                # Report fetch statistics
-                logger.info(
-                    f"Auto-fetch complete: "
-                    f"Success={len(fetch_stats['success'])}, "
-                    f"Failed={len(fetch_stats['failed'])}, "
-                    f"Insufficient data={len(fetch_stats['insufficient_data'])}"
-                )
-                
-                if fetch_stats['success']:
-                    logger.info(f"✓ Successfully processed: {', '.join(fetch_stats['success'])}")
-                if fetch_stats['failed']:
-                    logger.warning(f"⚠ Failed to fetch: {', '.join(fetch_stats['failed'])}")
-                if fetch_stats['insufficient_data']:
-                    logger.warning(f"⚠ Insufficient data: {', '.join(fetch_stats['insufficient_data'])}")
-                
-                # Retry feature query after auto-fetch
-                features_data = query.all()
-                
-                if not features_data:
-                    error_msg = f"Auto-fetch completed but no usable features generated.\n"
-                    error_msg += f"Successfully processed: {len(fetch_stats['success'])} instruments\n"
-                    error_msg += f"Failed: {len(fetch_stats['failed'])} instruments\n"
-                    error_msg += f"Insufficient data: {len(fetch_stats['insufficient_data'])} instruments\n"
-                    
-                    if fetch_stats['failed']:
-                        error_msg += f"\nFailed symbols: {', '.join(fetch_stats['failed'])}. "
-                        error_msg += "These symbols may not exist on Yahoo Finance or use different tickers.\n"
-                    
-                    if fetch_stats['insufficient_data']:
-                        error_msg += f"\nInsufficient data: {', '.join(fetch_stats['insufficient_data'])}. "
-                        error_msg += "Need 200+ candles for feature computation (EMA200 calculation).\n"
-                    
-                    error_msg += "\nSuggestion: Try training without instrument filter to use all available data."
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
-                
-                logger.info(
-                    f"✓ Auto-fetch successful! Proceeding with training on {len(features_data)} features from "
-                    f"{len(fetch_stats['success'])} instrument(s)"
-                )
-            
-            except Exception as auto_fetch_error:
-                # If auto-fetch fails, provide detailed error message
-                error_msg = f"Training data not found and auto-fetch failed: {str(auto_fetch_error)}. "
-                if instrument_filter:
-                    error_msg += f"Filter: {instrument_filter}. "
-                error_msg += f"Date range: {start_date} to {end_date}. "
-                error_msg += f"Total features in DB: {total_features}, Total instruments: {total_instruments}. "
-                error_msg += "You may need to check your internet connection or Yahoo Finance availability."
-                logger.error(error_msg)
-                raise ValueError(error_msg)
+        # Generate labels
+        df_labeled = generate_labels(df_features)
         
-        # Convert to DataFrame
-        df_rows = []
-        for feat in features_data:
-            row = feat.feature_json.copy() if feat.feature_json else {}
-            row['target'] = feat.target
-            row['ts_utc'] = feat.ts_utc
-            df_rows.append(row)
+        if df_labeled.empty or 'target' not in df_labeled.columns:
+            raise ValueError("Label generation failed - no target column")
         
-        df = pd.DataFrame(df_rows)
+        # Remove rows with null targets
+        df_labeled = df_labeled[df_labeled['target'].notna()].copy()
         
-        logger.info(f"Loaded {len(df)} feature rows from {start_date} to {end_date}")
+        if len(df_labeled) < MIN_TRAINING_SAMPLES:
+            raise ValueError(
+                f"Insufficient training data: {len(df_labeled)} samples "
+                f"(need at least {MIN_TRAINING_SAMPLES})"
+            )
         
-        # CRITICAL VALIDATION: Ensure we have enough data for training
-        MIN_SAMPLES = 100  # Minimum samples needed for reliable training
-        if len(df) < MIN_SAMPLES:
-            error_msg = f"Insufficient training data: {len(df)} samples (need at least {MIN_SAMPLES}). "
-            if instrument_filter:
-                error_msg += f"Try training without instrument filter or expanding date range."
-            else:
-                error_msg += f"Please ingest more historical data."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+        logger.info(f"✓ Prepared {len(df_labeled)} samples with labels")
         
-        # Validate target distribution
-        if 'target' not in df.columns:
-            raise ValueError("No 'target' column found in features. Check labeling logic.")
+        # =====================================================
+        # STEP 4: Train model
+        # =====================================================
+        self.update_state(state='PROGRESS', meta={
+            'status': f'Training {model_type} model on {len(df_labeled)} samples...',
+            'progress': 40
+        })
         
-        target_dist = df['target'].value_counts()
-        if len(target_dist) < 2:
-            raise ValueError(f"Target has only one class ({target_dist.index[0]}). Cannot train. Need both buy/sell signals.")
-        
-        # Check for reasonable class balance (warn if too imbalanced)
-        pos_ratio = (df['target'] == 1).sum() / len(df)
-        if pos_ratio < 0.01 or pos_ratio > 0.99:
-            logger.warning(f"Severe class imbalance: {pos_ratio*100:.1f}% positive samples. Training may be poor.")
-        
-        # Validate essential features exist
-        essential_features = ['rsi_14', 'atr_percent', 'volume_ratio']
-        missing_features = [f for f in essential_features if f not in df.columns]
-        if missing_features:
-            logger.warning(f"Missing expected features: {missing_features}. Feature engineering may be incomplete.")
-        
-        logger.info(f"✓ Validation passed: {len(df)} samples, {pos_ratio*100:.1f}% positive class")
-        self.update_state(state='PROGRESS', meta={'status': f'Preparing {len(df)} samples for {model_type} training...', 'progress': 25})
-        
-        # Train based on model type
-        if model_type == 'lstm':
-            metrics, model_path = _train_lstm(df, model_name, hyperparams, self)
+        if model_type == 'xgboost':
+            model, metrics = _train_xgboost(df_labeled, hyperparams, self)
+        elif model_type == 'lstm':
+            model, metrics = _train_lstm(df_labeled, hyperparams, self)
         elif model_type == 'transformer':
-            metrics, model_path = _train_transformer(df, model_name, hyperparams, self)
-        else:  # xgboost
-            metrics, model_path = _train_xgboost(df, model_name, hyperparams, self)
+            model, metrics = _train_transformer(df_labeled, hyperparams, self)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}. Use 'xgboost', 'lstm', or 'transformer'")
         
-        # Phase 1: Auto-activate model if it meets quality thresholds
+        # =====================================================
+        # STEP 5: Save model to disk
+        # =====================================================
+        self.update_state(state='PROGRESS', meta={
+            'status': 'Saving model to disk...',
+            'progress': 90
+        })
+        
+        model_path, model_format = save_model_artifact(model, model_name, model_type, stock_symbol)
+        
+        # =====================================================
+        # STEP 6: Save to database (atomic)
+        # =====================================================
+        self.update_state(state='PROGRESS', meta={
+            'status': 'Saving model metadata to database...',
+            'progress': 95
+        })
+        
+        # Convert numpy types to native Python
+        metrics_clean = _convert_to_native(metrics)
+        
+        # Check if model should be auto-activated
         should_activate = False
         if settings.AUTO_ACTIVATE_MODELS:
-            auc = metrics.get('auc_roc', 0)
-            accuracy = metrics.get('test_accuracy', metrics.get('accuracy', 0))
-            
+            auc = metrics_clean.get('auc_roc', metrics_clean.get('test_auc', 0))
+            accuracy = metrics_clean.get('test_accuracy', metrics_clean.get('accuracy', 0))
             if auc >= settings.MODEL_MIN_AUC and accuracy >= settings.MODEL_MIN_ACCURACY:
                 should_activate = True
-                logger.info(f"Model meets quality thresholds (AUC: {auc:.4f}, Accuracy: {accuracy:.4f}) - auto-activating")
-            else:
-                logger.info(f"Model below thresholds (AUC: {auc:.4f} < {settings.MODEL_MIN_AUC}, Accuracy: {accuracy:.4f} < {settings.MODEL_MIN_ACCURACY}) - manual activation required")
+                logger.info(f"Model meets quality thresholds (AUC: {auc:.4f}) - auto-activating")
         
-        # ✅ FIX: Convert all numpy types to native Python for JSON serialization
-        import json
-        import numpy as np
-        def convert_to_native(obj):
-            """Convert numpy types to native Python types for JSON"""
-            if isinstance(obj, dict):
-                return {k: convert_to_native(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_to_native(item) for item in obj]
-            elif isinstance(obj, (np.integer, np.int64, np.int32)):
-                return int(obj)
-            elif isinstance(obj, (np.floating, np.float64, np.float32)):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, (np.bool_, bool)):
-                return bool(obj)
-            else:
-                return obj
-        
-        metrics_clean = convert_to_native(metrics)
-        
-        # Save to database with stock_symbol
+        # Create model record
         model_record = Model(
             name=model_name,
             model_type=model_type,
             model_path=model_path,
-            stock_symbol=stock_symbol,  # Phase 3: Store which stock this model is for
+            model_format=model_format,
+            stock_symbol=stock_symbol,
             trained_at=datetime.utcnow(),
-            metrics_json=metrics_clean,  # ✅ Use cleaned metrics
-            is_active=should_activate  # Auto-activate if quality is good
+            metrics_json=metrics_clean,
+            is_active=should_activate
         )
         db.add(model_record)
         db.commit()
+        db.refresh(model_record)
         
-        logger.info(f"Model training complete for {stock_symbol}: {model_name} (AUC: {metrics.get('auc_roc', 0):.4f})")
+        logger.info(f"✓ Model saved: {model_name} (ID: {model_record.id})")
         
         return {
             "status": "success",
             "model_id": str(model_record.id),
             "model_name": model_name,
             "model_type": model_type,
-            "stock_symbol": stock_symbol,  # Phase 3: Return which stock
-            "metrics": metrics,
+            "model_format": model_format,
+            "stock_symbol": stock_symbol,
+            "model_path": model_path,
+            "metrics": metrics_clean,
+            "samples": len(df_labeled),
             "date_range": f"{start_date} to {end_date}",
-            "samples": len(df),
             "auto_activated": should_activate
         }
     
     except Exception as e:
-        logger.error(f"Model training failed: {str(e)}", exc_info=True)
+        logger.error(f"[{task_id}] Training failed: {str(e)}", exc_info=True)
         db.rollback()
         raise
+    
     finally:
         db.close()
 
 
-def _train_xgboost(df, model_name, hyperparams, task):
-    """Train XGBoost model"""
-    task.update_state(state='PROGRESS', meta={'status': 'Splitting data into train/validation/test sets...', 'progress': 35})
+# ============================================================================
+# TRAINING IMPLEMENTATIONS
+# ============================================================================
+def _train_xgboost(df: pd.DataFrame, hyperparams: dict, task) -> tuple:
+    """Train XGBoost model and return (model, metrics)"""
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Preparing XGBoost training data...',
+        'progress': 45
+    })
     
     trainer = ModelTrainer(hyperparams=hyperparams)
     X_train, y_train, X_val, y_val, X_test, y_test, feature_cols = trainer.prepare_data(df)
     
-    task.update_state(state='PROGRESS', meta={'status': f'Training XGBoost on {len(X_train)} samples...', 'progress': 50})
+    task.update_state(state='PROGRESS', meta={
+        'status': f'Training XGBoost on {len(X_train)} samples...',
+        'progress': 55
+    })
+    
     model = trainer.train(X_train, y_train, X_val, y_val)
     
-    task.update_state(state='PROGRESS', meta={'status': 'Evaluating model performance...', 'progress': 75})
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Evaluating XGBoost performance...',
+        'progress': 80
+    })
+    
     metrics = trainer.evaluate(model, X_test, y_test, feature_cols)
+    metrics['samples_train'] = len(X_train)
+    metrics['samples_val'] = len(X_val)
+    metrics['samples_test'] = len(X_test)
     
-    task.update_state(state='PROGRESS', meta={'status': 'Saving model to disk...', 'progress': 90})
-    model_path = trainer.save_model(model, model_name, metrics)
-    
-    return metrics, model_path
+    return model, metrics
 
 
-def _train_lstm(df, model_name, hyperparams, task):
-    """Train LSTM model"""
-    import os
+def _train_lstm(df: pd.DataFrame, hyperparams: dict, task) -> tuple:
+    """Train LSTM model and return (model, metrics)"""
+    from sklearn.metrics import roc_auc_score, accuracy_score
     
-    task.update_state(state='PROGRESS', meta={'status': 'Initializing LSTM neural network...', 'progress': 35})
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Initializing LSTM neural network...',
+        'progress': 45
+    })
     
     lstm = LSTMPredictor()
     
-    # Prepare sequences
-    task.update_state(state='PROGRESS', meta={'status': 'Creating time-series sequences...', 'progress': 45})
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Creating time-series sequences...',
+        'progress': 50
+    })
+    
     X, y = lstm.prepare_sequences(df)
     
     # Split data
@@ -462,22 +463,21 @@ def _train_lstm(df, model_name, hyperparams, task):
     X_val, y_val = X[train_size:train_size+val_size], y[train_size:train_size+val_size]
     X_test, y_test = X[train_size+val_size:], y[train_size+val_size:]
     
-    # Train
-    task.update_state(state='PROGRESS', meta={'status': f'Training LSTM neural network (50 epochs)...', 'progress': 55})
-    history = lstm.train(X_train, y_train, X_val, y_val, epochs=50)
+    epochs = hyperparams.get('epochs', 50)
     
-    # Evaluate
-    task.update_state(state='PROGRESS', meta={'status': 'Evaluating LSTM performance...', 'progress': 80})
+    task.update_state(state='PROGRESS', meta={
+        'status': f'Training LSTM ({epochs} epochs)...',
+        'progress': 60
+    })
+    
+    history = lstm.train(X_train, y_train, X_val, y_val, epochs=epochs)
+    
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Evaluating LSTM performance...',
+        'progress': 80
+    })
+    
     y_pred = lstm.predict(X_test)
-    
-    from sklearn.metrics import roc_auc_score, accuracy_score
-    
-    # Store training distributions for drift detection
-    feature_distributions = {}
-    feature_cols = [col for col in df.columns if col not in ['target', 'ts_utc']]
-    for col in feature_cols[:10]:  # First 10 features
-        if col in df.columns:
-            feature_distributions[col] = df[col].dropna().values.tolist()[:1000]
     
     metrics = {
         'auc_roc': float(roc_auc_score(y_test, y_pred)),
@@ -485,58 +485,43 @@ def _train_lstm(df, model_name, hyperparams, task):
         'samples_train': len(X_train),
         'samples_val': len(X_val),
         'samples_test': len(X_test),
-        'feature_distributions': feature_distributions
+        'epochs_trained': len(history.history['loss'])
     }
     
-    # Save
-    task.update_state(state='PROGRESS', meta={'status': 'Saving LSTM model...', 'progress': 92})
-    model_path = f"models/{model_name}"
-    os.makedirs(model_path, exist_ok=True)
-    lstm.save_model(model_path)
-    
-    return metrics, model_path
+    return lstm, metrics
 
 
-def _train_transformer(df, model_name, hyperparams, task):
-    """Train Transformer model with multi-head attention"""
-    task.update_state(state='PROGRESS', meta={'status': 'Training Transformer', 'progress': 50})
-    
+def _train_transformer(df: pd.DataFrame, hyperparams: dict, task) -> tuple:
+    """Train Transformer model and return (model, metrics)"""
     from app.ml.transformer_model import TransformerPredictor
-    import numpy as np
-    from sklearn.model_selection import train_test_split
     from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score
     
-    logger.info("Starting Transformer model training")
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Initializing Transformer model...',
+        'progress': 45
+    })
     
-    # Prepare data
     feature_cols = [col for col in df.columns if col not in ['target', 'ts_utc']]
     X = df[feature_cols].values
     y = df['target'].values
     
-    # Split data: 70% train, 15% val, 15% test
-    total_samples = len(df)
-    train_size = int(0.70 * total_samples)
-    val_size = int(0.15 * total_samples)
+    # Split data
+    train_size = int(0.70 * len(df))
+    val_size = int(0.15 * len(df))
     
-    X_train = X[:train_size]
-    y_train = y[:train_size]
-    X_val = X[train_size:train_size + val_size]
-    y_val = y[train_size:train_size + val_size]
-    X_test = X[train_size + val_size:]
-    y_test = y[train_size + val_size:]
+    X_train, y_train = X[:train_size], y[:train_size]
+    X_val, y_val = X[train_size:train_size + val_size], y[train_size:train_size + val_size]
+    X_test, y_test = X[train_size + val_size:], y[train_size + val_size:]
     
-    logger.info(f"Data split - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
-    
-    # Get hyperparameters
+    # Hyperparameters
     seq_length = hyperparams.get('seq_length', 20)
     d_model = hyperparams.get('d_model', 128)
     num_heads = hyperparams.get('num_heads', 8)
     num_layers = hyperparams.get('num_layers', 3)
     dff = hyperparams.get('dff', 256)
-    epochs = hyperparams.get('n_estimators', 100)  # Reuse n_estimators
+    epochs = hyperparams.get('epochs', 100)
     batch_size = hyperparams.get('batch_size', 32)
     
-    # Initialize transformer
     transformer = TransformerPredictor(
         seq_length=seq_length,
         features=len(feature_cols),
@@ -545,13 +530,13 @@ def _train_transformer(df, model_name, hyperparams, task):
         num_layers=num_layers,
         dff=dff
     )
-    
-    # Build model
     transformer.build_model()
-    logger.info(f"Transformer model built with {transformer.model.count_params():,} parameters")
     
-    # Prepare sequences
-    task.update_state(state='PROGRESS', meta={'status': 'Preparing sequences', 'progress': 60})
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Preparing Transformer sequences...',
+        'progress': 55
+    })
+    
     X_train_seq, y_train_seq = transformer.prepare_sequences(
         pd.DataFrame(np.column_stack([X_train, y_train]), columns=feature_cols + ['target'])
     )
@@ -562,10 +547,11 @@ def _train_transformer(df, model_name, hyperparams, task):
         pd.DataFrame(np.column_stack([X_test, y_test]), columns=feature_cols + ['target'])
     )
     
-    logger.info(f"Sequences prepared - Train: {X_train_seq.shape}, Val: {X_val_seq.shape}, Test: {X_test_seq.shape}")
+    task.update_state(state='PROGRESS', meta={
+        'status': f'Training Transformer ({epochs} epochs)...',
+        'progress': 65
+    })
     
-    # Train model
-    task.update_state(state='PROGRESS', meta={'status': 'Training Transformer network', 'progress': 70})
     history = transformer.train(
         X_train_seq, y_train_seq,
         X_val_seq, y_val_seq,
@@ -573,73 +559,105 @@ def _train_transformer(df, model_name, hyperparams, task):
         batch_size=batch_size
     )
     
-    # Evaluate on test set
-    task.update_state(state='PROGRESS', meta={'status': 'Evaluating model', 'progress': 90})
+    task.update_state(state='PROGRESS', meta={
+        'status': 'Evaluating Transformer performance...',
+        'progress': 85
+    })
+    
     y_pred_proba = transformer.predict(X_test_seq).flatten()
-    y_pred = (y_pred_proba > 0.3).astype(int)  # Use lower threshold like XGBoost
+    y_pred = (y_pred_proba > 0.3).astype(int)
     
-    # Calculate metrics
-    test_auc = roc_auc_score(y_test_seq, y_pred_proba)
-    test_acc = accuracy_score(y_test_seq, y_pred)
-    test_precision = precision_score(y_test_seq, y_pred, zero_division=0)
-    test_recall = recall_score(y_test_seq, y_pred, zero_division=0)
-    
-    val_loss = history.history['val_loss'][-1]
-    val_auc = history.history.get('val_auc_1', history.history.get('val_auc', [test_auc]))[-1]
-    
-    # Store training distributions for drift detection
-    feature_distributions = {}
-    feature_cols = [col for col in df.columns if col not in ['target', 'ts_utc']]
-    for col in feature_cols[:10]:  # First 10 features
-        if col in df.columns:
-            feature_distributions[col] = df[col].dropna().values.tolist()[:1000]
+    # Calculate AUC - handle multi-class case
+    try:
+        # Check if binary or multi-class
+        unique_classes = np.unique(y_test_seq)
+        if len(unique_classes) == 2:
+            auc = float(roc_auc_score(y_test_seq, y_pred_proba))
+        else:
+            # For multi-class, convert to binary (BUY vs not-BUY)
+            y_binary = (y_test_seq == 1).astype(int)  # 1 = BUY
+            auc = float(roc_auc_score(y_binary, y_pred_proba))
+    except Exception as e:
+        logger.warning(f"AUC calculation failed: {e}. Using accuracy-based estimate.")
+        auc = float(accuracy_score(y_test_seq, y_pred))
     
     metrics = {
-        'train_auc': history.history.get('auc_1', history.history.get('auc', [test_auc]))[-1],
-        'val_auc': val_auc,
-        'test_auc': test_auc,
-        'test_accuracy': test_acc,
-        'test_precision': test_precision,
-        'test_recall': test_recall,
-        'val_loss': val_loss,
+        'auc_roc': auc,
+        'test_accuracy': float(accuracy_score(y_test_seq, y_pred)),
+        'test_precision': float(precision_score(y_test_seq, y_pred, zero_division=0, average='binary' if len(np.unique(y_test_seq)) == 2 else 'weighted')),
+        'test_recall': float(recall_score(y_test_seq, y_pred, zero_division=0, average='binary' if len(np.unique(y_test_seq)) == 2 else 'weighted')),
+        'samples_train': len(X_train_seq),
+        'samples_val': len(X_val_seq),
+        'samples_test': len(X_test_seq),
         'epochs_trained': len(history.history['loss']),
-        'total_params': int(transformer.model.count_params()),
-        'feature_distributions': feature_distributions
+        'total_params': int(transformer.model.count_params())
     }
     
-    # Calculate class metrics
-    true_positives = int(((y_pred == 1) & (y_test_seq == 1)).sum())
-    false_positives = int(((y_pred == 1) & (y_test_seq == 0)).sum())
-    true_negatives = int(((y_pred == 0) & (y_test_seq == 0)).sum())
-    false_negatives = int(((y_pred == 0) & (y_test_seq == 1)).sum())
-    
-    logger.info(f"Transformer Test Metrics - AUC: {test_auc:.4f}, Accuracy: {test_acc:.4f}")
-    logger.info(f"TP: {true_positives}, FP: {false_positives}, TN: {true_negatives}, FN: {false_negatives}")
-    
-    # Save model
-    model_path = f"models/{model_name}"
-    os.makedirs(model_path, exist_ok=True)
-    transformer.save_model(model_path)
-    
-    return metrics, model_path
+    return transformer, metrics
 
 
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+def _load_csv_data(db, csv_dataset_id: str, stock_symbol: str, task) -> tuple:
+    """Load training data from CSV dataset"""
+    from app.routers.csv_upload import load_csv_for_training
+    
+    task.update_state(state='PROGRESS', meta={
+        'status': f'Loading CSV dataset {csv_dataset_id}...',
+        'progress': 12
+    })
+    
+    df = load_csv_for_training(csv_dataset_id, stock_symbol)
+    logger.info(f"Loaded {len(df)} rows from CSV")
+    
+    # Ensure instrument exists
+    instrument = db.query(Instrument).filter(Instrument.symbol == stock_symbol).first()
+    if not instrument:
+        instrument = Instrument(
+            symbol=stock_symbol,
+            name=stock_symbol,
+            exchange='CSV',
+            instrument_type='EQ'
+        )
+        db.add(instrument)
+        db.commit()
+        db.refresh(instrument)
+    
+    return df, instrument
+
+
+def _convert_to_native(obj):
+    """Convert numpy types to native Python types for JSON serialization"""
+    if isinstance(obj, dict):
+        return {k: _convert_to_native(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_to_native(item) for item in obj]
+    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.bool_, bool)):
+        return bool(obj)
+    else:
+        return obj
+
+
+# ============================================================================
+# SCHEDULED RETRAIN
+# ============================================================================
 @celery_app.task(bind=True)
 def scheduled_retrain(self):
-    """
-    Spec 12: Weekly retraining task
-    """
-    # Trigger retraining for all active instruments
+    """Weekly retraining task"""
     logger.info("Scheduled retrain started")
     
     model_name = f"auto_retrain_{datetime.utcnow().strftime('%Y%m%d')}"
-    
-    # Get stock from config or database
-    from app.config import settings
-    stock_symbol = getattr(settings, 'DEFAULT_RETRAIN_STOCK', 'RELIANCE')
+    stock_symbol = settings.DEFAULT_RETRAIN_STOCK
     
     return train_model.delay(
         model_name=model_name,
-        instrument_filter=stock_symbol,  # ✅ FIXED: Use config, default RELIANCE
+        instrument_filter=stock_symbol,
         model_type='xgboost'
     )

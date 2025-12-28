@@ -1,0 +1,2357 @@
+﻿docker : [2025-12-27 
+16:25:06,731: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+At line:1 char:1
++ docker logs 
+jarvistrade_celery_worker 
+--tail 500 2>&1 | Out-File 
+-Enc ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: ([2025  
+  -12-27 16:...s via API    
+ or UI:String) [], Remot    
+eException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+[2025-12-27 16:25:06,731: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+your@example.com ---
+[2025-12-27 16:25:06,731: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[27f9478c-f7f1-48
+70-b078-6ea9d47428b7] 
+received
+[2025-12-27 16:25:06,732: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user your@example.com: 
+[]
+[2025-12-27 16:25:06,733: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for your@example.com
+[2025-12-27 16:25:06,733: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:25:06,733: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+admin@jarvistrade.com ---
+[2025-12-27 16:25:06,733: 
+INFO/ForkPoolWorker-3] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.NS?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:25:06,734: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+admin@jarvistrade.com: []
+[2025-12-27 16:25:06,734: 
+INFO/ForkPoolWorker-2] 
+Checking 1 models for user 
+testuser@example.com
+[2025-12-27 16:25:06,735: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for admin@jarvistrade.com
+[2025-12-27 16:25:06,735: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:25:06,735: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:25:06,735: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK COMPLETED: 1 
+models, 0 signals
+[2025-12-27 16:25:06,735: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:25:06,737: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.execution.check_an
+d_execute_signals[9d436959-5
+71f-42a6-a550-1509253a3bd2] 
+succeeded in 
+0.0319446409999955s: 
+{'status': 'success', 
+'models_checked': 1, 
+'signals_generated': 0}
+[2025-12-27 16:25:06,737: 
+WARNING/ForkPoolWorker-2] 
+Features too old for 
+RELIANCE: 724206.737871s
+[2025-12-27 16:25:06,739: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[27f9478c-f7
+f1-4870-b078-6ea9d47428b7] 
+succeeded in 
+0.006426156999992827s: 
+{'status': 'no_trades'}
+[2025-12-27 16:25:06,739: 
+INFO/ForkPoolWorker-2] 
+Checking 0 models for user 
+newuser@example.com
+[2025-12-27 16:25:06,740: 
+INFO/ForkPoolWorker-2] 
+Checking 0 models for user 
+test@example.com
+[2025-12-27 16:25:06,741: 
+INFO/ForkPoolWorker-2] 
+Checking 0 models for user 
+testuser@gmail.com
+[2025-12-27 16:25:06,742: 
+INFO/ForkPoolWorker-2] 
+Checking 0 models for user 
+your@example.com
+[2025-12-27 16:25:06,742: 
+INFO/ForkPoolWorker-2] 
+Checking 0 models for user 
+admin@jarvistrade.com
+[2025-12-27 16:25:06,742: 
+INFO/ForkPoolWorker-2] 
+Signal generation complete: 
+0 new signals
+[2025-12-27 16:25:06,744: 
+INFO/ForkPoolWorker-2] Task 
+app.tasks.signal_generation.
+generate_signals[31fba21f-51
+e2-40f9-81ea-705e26215569] 
+succeeded in 
+0.019035361000021567s: 
+{'status': 'success', 
+'signals_generated': 0}
+[2025-12-27 16:25:06,988: 
+WARNING/ForkPoolWorker-3] 
+ΓÜá BHARTI AIRTEL.NS HTTP 
+status 404
+[2025-12-27 16:25:06,988: 
+INFO/ForkPoolWorker-3] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.BO?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:25:07,255: 
+WARNING/ForkPoolWorker-3] 
+ΓÜá BHARTI AIRTEL.BO HTTP 
+status 404
+[2025-12-27 16:25:07,256: 
+ERROR/ForkPoolWorker-3] Γ¥î 
+Failed to fetch BHARTI 
+AIRTEL from Yahoo Finance. 
+Tried: BHARTI AIRTEL.NS, 
+BHARTI AIRTEL.BO. Last 
+error: HTTP 404
+[2025-12-27 16:25:07,257: 
+WARNING/ForkPoolWorker-3] 
+No data from Yahoo for 
+BHARTI AIRTEL
+[2025-12-27 16:25:07,265: 
+INFO/ForkPoolWorker-3] 
+Fresh features computation 
+complete: Computed=0, 
+Cached=14, Failed=1, 
+RateLimited=0
+[2025-12-27 16:25:07,267: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.fresh_features.com
+pute_fresh_features[e34d4fa4
+-4b16-4deb-98b5-4eb356ebc39f
+] succeeded in 
+0.5490267469999992s: 
+{'status': 'success', 
+'stats': {'computed': 0, 
+'cached': 14, 'failed': 1, 
+'rate_limited': 0}}
+[2025-12-27 16:25:36,718: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[1fbd5aba-96
+78-4739-a128-efeb208f50a8] 
+received
+[2025-12-27 16:25:36,729: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[1fbd5a
+ba-9678-4739-a128-efeb208f50
+a8] succeeded in 
+0.009323150000000169s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:25:36,732: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[06933ed1-a612-42
+0c-b1df-3ab411d58f77] 
+received
+[2025-12-27 16:25:36,738: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[06933ed1-a6
+12-420c-b1df-3ab411d58f77] 
+succeeded in 
+0.00478161099999852s: 
+{'status': 'no_trades'}
+[2025-12-27 16:26:06,704: 
+INFO/MainProcess] Task app.t
+asks.execution.check_and_exe
+cute_signals[0a15ac44-862f-4
+371-828d-34e0a998a795] 
+received
+[2025-12-27 16:26:06,706: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:26:06,706: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK STARTED 
+(Multi-Model)
+[2025-12-27 16:26:06,706: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:26:06,708: 
+INFO/ForkPoolWorker-4] Γ£ô 
+Checking signals for 6 
+user(s) with auto_execute 
+enabled
+[2025-12-27 16:26:06,708: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@example.com ---
+[2025-12-27 16:26:06,715: 
+INFO/ForkPoolWorker-4] 
+Retrieved 1 active model(s) 
+for user 
+testuser@example.com: 
+['RELIANCE(ddREL)']
+[2025-12-27 16:26:06,715: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udcca User has 1 
+model(s) selected
+[2025-12-27 16:26:06,715: 
+INFO/ForkPoolWorker-4] \n   
+ \ud83d\udd0d Model: ddREL 
+(Stock: RELIANCE)
+[2025-12-27 16:26:06,717: 
+INFO/MainProcess] Task app.t
+asks.fresh_features.compute_
+fresh_features[cfc625ad-60ce
+-47ea-8cab-6a72b2a63a43] 
+received
+[2025-12-27 16:26:06,717: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc8 VIX: 9.15
+[2025-12-27 16:26:06,718: 
+WARNING/ForkPoolWorker-4] 
+Kite WebSocket is down, 
+using fallback data
+[2025-12-27 16:26:06,719: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[261cfee1-c1
+e0-4c0c-af5c-c7d5b090f302] 
+received
+[2025-12-27 16:26:06,721: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.execute_p
+aper_trades[29e22e4c-5755-49
+40-a6a3-5b3375e7fd37] 
+received
+[2025-12-27 16:26:06,722: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc5 Feature age: 
+724267s
+[2025-12-27 16:26:06,722: 
+WARNING/ForkPoolWorker-4]   
+    ΓÜá∩╕Å  Features too 
+old (724267s)
+[2025-12-27 16:26:06,722: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+newuser@example.com ---
+[2025-12-27 16:26:06,724: 
+INFO/ForkPoolWorker-2] 
+Computing fresh features 
+for 15 instruments
+[2025-12-27 16:26:06,725: 
+INFO/MainProcess] Task app.t
+asks.signal_generation.gener
+ate_signals[6c6e388b-ba5a-4b
+45-b771-29e724200b6e] 
+received
+[2025-12-27 16:26:06,726: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+newuser@example.com: []
+[2025-12-27 16:26:06,726: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for newuser@example.com
+[2025-12-27 16:26:06,726: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:26:06,726: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+test@example.com ---
+[2025-12-27 16:26:06,726: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[261cfe
+e1-c1e0-4c0c-af5c-c7d5b090f3
+02] succeeded in 
+0.006281690999969669s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:26:06,727: 
+INFO/ForkPoolWorker-1] No 
+unexecuted signals found
+[2025-12-27 16:26:06,729: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user test@example.com: 
+[]
+[2025-12-27 16:26:06,729: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for test@example.com
+[2025-12-27 16:26:06,729: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:26:06,729: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@gmail.com ---
+[2025-12-27 16:26:06,730: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.paper_trading.exec
+ute_paper_trades[29e22e4c-57
+55-4940-a6a3-5b3375e7fd37] 
+succeeded in 
+0.006153353000001971s: 
+{'status': 'no_signals'}
+[2025-12-27 16:26:06,732: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[924e8c4b-14a5-47
+f9-8ed9-8a8dd9845b9d] 
+received
+[2025-12-27 16:26:06,733: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+testuser@gmail.com: []
+[2025-12-27 16:26:06,733: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for testuser@gmail.com
+[2025-12-27 16:26:06,733: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:26:06,733: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+your@example.com ---
+[2025-12-27 16:26:06,737: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user your@example.com: 
+[]
+[2025-12-27 16:26:06,738: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for your@example.com
+[2025-12-27 16:26:06,738: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:26:06,738: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+admin@jarvistrade.com ---
+[2025-12-27 16:26:06,739: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/RELIANCE
+.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:06,740: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[924e8c4b-14
+a5-47f9-8ed9-8a8dd9845b9d] 
+succeeded in 
+0.006304324999973687s: 
+{'status': 'no_trades'}
+[2025-12-27 16:26:06,742: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+admin@jarvistrade.com: []
+[2025-12-27 16:26:06,742: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for admin@jarvistrade.com
+[2025-12-27 16:26:06,742: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:26:06,742: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:26:06,742: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK COMPLETED: 1 
+models, 0 signals
+[2025-12-27 16:26:06,742: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:26:06,743: 
+INFO/ForkPoolWorker-3] 
+Checking 1 models for user 
+testuser@example.com
+[2025-12-27 16:26:06,744: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.execution.check_an
+d_execute_signals[0a15ac44-8
+62f-4371-828d-34e0a998a795] 
+succeeded in 
+0.039142474000016136s: 
+{'status': 'success', 
+'models_checked': 1, 
+'signals_generated': 0}
+[2025-12-27 16:26:06,747: 
+WARNING/ForkPoolWorker-3] 
+Features too old for 
+RELIANCE: 724266.747357s
+[2025-12-27 16:26:06,748: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+newuser@example.com
+[2025-12-27 16:26:06,750: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+test@example.com
+[2025-12-27 16:26:06,751: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+testuser@gmail.com
+[2025-12-27 16:26:06,753: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+your@example.com
+[2025-12-27 16:26:06,754: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+admin@jarvistrade.com
+[2025-12-27 16:26:06,754: 
+INFO/ForkPoolWorker-3] 
+Signal generation complete: 
+0 new signals
+[2025-12-27 16:26:06,756: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.signal_generation.
+generate_signals[6c6e388b-ba
+5a-4b45-b771-29e724200b6e] 
+succeeded in 
+0.028236373000027015s: 
+{'status': 'success', 
+'signals_generated': 0}
+[2025-12-27 16:26:07,055: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from RELIANCE.NS
+[2025-12-27 16:26:07,064: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+RELIANCE: 173/200
+[2025-12-27 16:26:07,068: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/TCS.NS?i
+nterval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:26:07,387: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from TCS.NS
+[2025-12-27 16:26:07,398: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+TCS: 1/200
+[2025-12-27 16:26:07,402: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/INFY.NS?
+interval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:26:07,795: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from INFY.NS
+[2025-12-27 16:26:07,802: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+INFY: 1/200
+[2025-12-27 16:26:07,804: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HDFCBANK
+.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:08,117: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HDFCBANK.NS
+[2025-12-27 16:26:08,124: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HDFCBANK: 1/200
+[2025-12-27 16:26:08,127: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/ICICIBAN
+K.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:08,424: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from ICICIBANK.NS
+[2025-12-27 16:26:08,430: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+ICICIBANK: 1/200
+[2025-12-27 16:26:08,433: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HINDUNIL
+VR.NS?interval=1d&range=250d
+ (Try 1/3)
+[2025-12-27 16:26:08,740: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HINDUNILVR.NS
+[2025-12-27 16:26:08,747: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HINDUNILVR: 1/200
+[2025-12-27 16:26:08,750: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/ITC.NS?i
+nterval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:26:09,049: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from ITC.NS
+[2025-12-27 16:26:09,062: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+ITC: 1/200
+[2025-12-27 16:26:09,065: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/SBIN.NS?
+interval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:26:09,370: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from SBIN.NS
+[2025-12-27 16:26:09,377: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+SBIN: 1/200
+[2025-12-27 16:26:09,380: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.NS?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:26:09,646: 
+WARNING/ForkPoolWorker-2] 
+ΓÜá BHARTI AIRTEL.NS HTTP 
+status 404
+[2025-12-27 16:26:09,646: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.BO?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:26:09,898: 
+WARNING/ForkPoolWorker-2] 
+ΓÜá BHARTI AIRTEL.BO HTTP 
+status 404
+[2025-12-27 16:26:09,898: 
+ERROR/ForkPoolWorker-2] Γ¥î 
+Failed to fetch BHARTI 
+AIRTEL from Yahoo Finance. 
+Tried: BHARTI AIRTEL.NS, 
+BHARTI AIRTEL.BO. Last 
+error: HTTP 404
+[2025-12-27 16:26:09,900: 
+WARNING/ForkPoolWorker-2] 
+No data from Yahoo for 
+BHARTI AIRTEL
+[2025-12-27 16:26:09,905: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/KOTAKBAN
+K.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:10,201: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from KOTAKBANK.NS
+[2025-12-27 16:26:10,208: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+KOTAKBANK: 1/200
+[2025-12-27 16:26:10,217: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/TATAELXS
+I.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:10,498: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from TATAELXSI.NS
+[2025-12-27 16:26:10,507: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+TATAELXSI: 173/200
+[2025-12-27 16:26:10,511: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HAL.NS?i
+nterval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:26:10,864: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HAL.NS
+Γ£ô Configuration validated for development environment
+ 
+ -------------- celery@3e2b2c19b6de v5.3.4 (emerald-rush)
+--- ***** ----- 
+-- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.41 2025-12-27 16:27:02
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         jarvistrade:0x714c2c277390
+- ** ---------- .> transport:   redis://redis:6379/0
+- ** ---------- .> results:     redis://redis:6379/0
+- *** --- * --- .> concurrency: 4 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . app.tasks.data_ingestion.fetch_eod_bhavcopy
+  . app.tasks.data_ingestion.fetch_historical_data
+  . app.tasks.data_ingestion.fetch_recent_data
+  . app.tasks.execution.check_and_execute_signals
+  . app.tasks.fresh_features.compute_features_for_stock
+  . app.tasks.fresh_features.compute_fresh_features
+  . app.tasks.model_training.scheduled_retrain
+  . app.tasks.model_training.train_model
+  . app.tasks.monitoring.detect_model_drift
+  . app.tasks.news_sentiment.fetch_and_analyze_news
+  . app.tasks.news_sentiment.update_sentiment_features
+  . app.tasks.paper_trading.execute_paper_trades
+  . app.tasks.paper_trading.monitor_paper_trades
+  . app.tasks.position_monitor.monitor_open_positions
+  . app.tasks.signal_generation.generate_signals
+
+[2025-12-27 16:26:10,870: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HAL: 1/200
+[2025-12-27 16:26:10,872: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HAVELLS.
+NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:11,240: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HAVELLS.NS
+[2025-12-27 16:26:11,247: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HAVELLS: 1/200
+[2025-12-27 16:26:11,249: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HCLTECH.
+NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:11,533: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HCLTECH.NS
+[2025-12-27 16:26:11,541: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HCLTECH: 1/200
+[2025-12-27 16:26:11,548: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/JKPAPER.
+NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:26:11,870: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from JKPAPER.NS
+[2025-12-27 16:26:11,877: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+JKPAPER: 173/200
+[2025-12-27 16:26:11,878: 
+INFO/ForkPoolWorker-2] 
+Fresh features computation 
+complete: Computed=0, 
+Cached=0, Failed=15, 
+RateLimited=0
+[2025-12-27 16:26:11,879: 
+INFO/ForkPoolWorker-2] Task 
+app.tasks.fresh_features.com
+pute_fresh_features[cfc625ad
+-60ce-47ea-8cab-6a72b2a63a43
+] succeeded in 
+5.161107236999953s: 
+{'status': 'success', 
+'stats': {'computed': 0, 
+'cached': 0, 'failed': 15, 
+'rate_limited': 0}}
+[2025-12-27 16:26:36,719: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[6c31373f-f3
+95-4fb9-acd1-54f6f6db240e] 
+received
+[2025-12-27 16:26:36,725: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[6c3137
+3f-f395-4fb9-acd1-54f6f6db24
+0e] succeeded in 
+0.00522141199996895s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:26:36,732: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[7ed288d0-eb87-42
+f6-b7bf-599db1402061] 
+received
+[2025-12-27 16:26:36,738: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[7ed288d0-eb
+87-42f6-b7bf-599db1402061] 
+succeeded in 
+0.005140458999960629s: 
+{'status': 'no_trades'}
+
+worker: Warm shutdown 
+(MainProcess)
+2025-12-27 16:26:56.912912: 
+I tensorflow/core/util/port.
+cc:113] oneDNN custom 
+operations are on. You may 
+see slightly different 
+numerical results due to 
+floating-point round-off 
+errors from different 
+computation orders. To turn 
+them off, set the 
+environment variable 
+`TF_ENABLE_ONEDNN_OPTS=0`.
+2025-12-27 16:26:57.367174: 
+E external/local_xla/xla/str
+eam_executor/cuda/cuda_dnn.c
+c:9261] Unable to register 
+cuDNN factory: Attempting 
+to register factory for 
+plugin cuDNN when one has 
+already been registered
+2025-12-27 16:26:57.367308: 
+E external/local_xla/xla/str
+eam_executor/cuda/cuda_fft.c
+c:607] Unable to register 
+cuFFT factory: Attempting 
+to register factory for 
+plugin cuFFT when one has 
+already been registered
+2025-12-27 16:26:57.429724: 
+E external/local_xla/xla/str
+eam_executor/cuda/cuda_blas.
+cc:1515] Unable to register 
+cuBLAS factory: Attempting 
+to register factory for 
+plugin cuBLAS when one has 
+already been registered
+2025-12-27 16:26:57.574835: 
+I tensorflow/core/platform/c
+pu_feature_guard.cc:182] 
+This TensorFlow binary is 
+optimized to use available 
+CPU instructions in 
+performance-critical 
+operations.
+To enable the following 
+instructions: AVX2 AVX_VNNI 
+FMA, in other operations, 
+rebuild TensorFlow with the 
+appropriate compiler flags.
+2025-12-27 16:26:59.758953: 
+W tensorflow/compiler/tf2ten
+sorrt/utils/py_utils.cc:38] 
+TF-TRT Warning: Could not 
+find TensorRT
+You're running the worker 
+with superuser privileges: 
+this is
+absolutely not recommended!
+
+Please specify a different 
+user using the --uid option.
+
+User information: uid=0 
+euid=0 gid=0 egid=0
+
+[2025-12-27 16:27:05,356: 
+WARNING/MainProcess] The 
+broker_connection_retry 
+configuration setting will 
+no longer determine
+whether broker connection 
+retries are made during 
+startup in Celery 6.0 and 
+above.
+If you wish to retain the 
+existing behavior for 
+retrying connections on 
+startup,
+you should set broker_connec
+tion_retry_on_startup to 
+True.
+
+[2025-12-27 16:27:05,407: 
+INFO/MainProcess] Connected 
+to redis://redis:6379/0
+[2025-12-27 16:27:05,420: 
+WARNING/MainProcess] The 
+broker_connection_retry 
+configuration setting will 
+no longer determine
+whether broker connection 
+retries are made during 
+startup in Celery 6.0 and 
+above.
+If you wish to retain the 
+existing behavior for 
+retrying connections on 
+startup,
+you should set broker_connec
+tion_retry_on_startup to 
+True.
+
+[2025-12-27 16:27:05,447: 
+INFO/MainProcess] mingle: 
+searching for neighbors
+[2025-12-27 16:27:06,467: 
+INFO/MainProcess] mingle: 
+all alone
+[2025-12-27 16:27:06,502: 
+INFO/MainProcess] 
+celery@3e2b2c19b6de ready.
+[2025-12-27 16:27:06,747: 
+INFO/MainProcess] Task app.t
+asks.execution.check_and_exe
+cute_signals[ab3d2461-0bd7-4
+e52-a1a8-76f526a46240] 
+received
+[2025-12-27 16:27:06,752: 
+INFO/MainProcess] Task app.t
+asks.fresh_features.compute_
+fresh_features[c1f0697d-ed6f
+-4486-af76-138c5ae6b38b] 
+received
+[2025-12-27 16:27:06,763: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[96637e65-94
+74-4907-9f15-1d06d7146a55] 
+received
+[2025-12-27 16:27:06,765: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.execute_p
+aper_trades[144ccf31-f832-4a
+0e-81a0-3e86208053c5] 
+received
+[2025-12-27 16:27:06,768: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:27:06,769: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK STARTED 
+(Multi-Model)
+[2025-12-27 16:27:06,769: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:27:06,770: 
+INFO/MainProcess] Task app.t
+asks.signal_generation.gener
+ate_signals[200c9174-39be-44
+16-b412-02e1c0de8564] 
+received
+[2025-12-27 16:27:06,774: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[3a41078b-9b17-4a
+3b-84d6-a1131bbcab3c] 
+received
+[2025-12-27 16:27:06,876: 
+INFO/ForkPoolWorker-1] No 
+unexecuted signals found
+[2025-12-27 16:27:06,883: 
+INFO/ForkPoolWorker-2] 
+Computing fresh features 
+for 15 instruments
+[2025-12-27 16:27:06,885: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.paper_trading.exec
+ute_paper_trades[144ccf31-f8
+32-4a0e-81a0-3e86208053c5] 
+succeeded in 
+0.1128275140000028s: 
+{'status': 'no_signals'}
+[2025-12-27 16:27:06,914: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/RELIANCE
+.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:06,924: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[96637e
+65-9474-4907-9f15-1d06d7146a
+55] succeeded in 
+0.15875177899999926s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:27:06,929: 
+INFO/ForkPoolWorker-4] Γ£ô 
+Checking signals for 6 
+user(s) with auto_execute 
+enabled
+[2025-12-27 16:27:06,929: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@example.com ---
+[2025-12-27 16:27:06,943: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[3a41078b-9b
+17-4a3b-84d6-a1131bbcab3c] 
+succeeded in 
+0.015569056999993336s: 
+{'status': 'no_trades'}
+[2025-12-27 16:27:06,967: 
+INFO/ForkPoolWorker-4] 
+Retrieved 1 active model(s) 
+for user 
+testuser@example.com: 
+['RELIANCE(ddREL)']
+[2025-12-27 16:27:06,967: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udcca User has 1 
+model(s) selected
+[2025-12-27 16:27:06,967: 
+INFO/ForkPoolWorker-4] \n   
+ \ud83d\udd0d Model: ddREL 
+(Stock: RELIANCE)
+[2025-12-27 16:27:06,995: 
+INFO/ForkPoolWorker-1] 
+Checking 1 models for user 
+testuser@example.com
+[2025-12-27 16:27:07,013: 
+WARNING/ForkPoolWorker-1] 
+Features too old for 
+RELIANCE: 724327.012765s
+[2025-12-27 16:27:07,014: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+newuser@example.com
+[2025-12-27 16:27:07,016: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+test@example.com
+[2025-12-27 16:27:07,019: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+testuser@gmail.com
+[2025-12-27 16:27:07,020: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+your@example.com
+[2025-12-27 16:27:07,021: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+admin@jarvistrade.com
+[2025-12-27 16:27:07,021: 
+INFO/ForkPoolWorker-1] 
+Signal generation complete: 
+0 new signals
+[2025-12-27 16:27:07,022: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.signal_generation.
+generate_signals[200c9174-39
+be-4416-b412-02e1c0de8564] 
+succeeded in 
+0.13479811599995628s: 
+{'status': 'success', 
+'signals_generated': 0}
+[2025-12-27 16:27:07,283: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from RELIANCE.NS
+[2025-12-27 16:27:07,290: 
+INFO/ForkPoolWorker-4] 
+India VIX: 9.15
+[2025-12-27 16:27:07,292: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc8 VIX: 9.15
+[2025-12-27 16:27:07,298: 
+WARNING/ForkPoolWorker-4] 
+Kite WebSocket is down, 
+using fallback data
+[2025-12-27 16:27:07,300: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+RELIANCE: 173/200
+[2025-12-27 16:27:07,305: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/TCS.NS?i
+nterval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:27:07,308: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc5 Feature age: 
+724327s
+[2025-12-27 16:27:07,308: 
+WARNING/ForkPoolWorker-4]   
+    ΓÜá∩╕Å  Features too 
+old (724327s)
+[2025-12-27 16:27:07,308: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+newuser@example.com ---
+[2025-12-27 16:27:07,315: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+newuser@example.com: []
+[2025-12-27 16:27:07,315: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for newuser@example.com
+[2025-12-27 16:27:07,315: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:27:07,315: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+test@example.com ---
+[2025-12-27 16:27:07,320: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user test@example.com: 
+[]
+[2025-12-27 16:27:07,320: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for test@example.com
+[2025-12-27 16:27:07,320: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:27:07,320: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@gmail.com ---
+[2025-12-27 16:27:07,324: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+testuser@gmail.com: []
+[2025-12-27 16:27:07,324: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for testuser@gmail.com
+[2025-12-27 16:27:07,324: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:27:07,324: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+your@example.com ---
+[2025-12-27 16:27:07,327: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user your@example.com: 
+[]
+[2025-12-27 16:27:07,328: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for your@example.com
+[2025-12-27 16:27:07,328: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:27:07,328: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+admin@jarvistrade.com ---
+[2025-12-27 16:27:07,329: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+admin@jarvistrade.com: []
+[2025-12-27 16:27:07,330: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for admin@jarvistrade.com
+[2025-12-27 16:27:07,330: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:27:07,330: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:27:07,330: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK COMPLETED: 1 
+models, 0 signals
+[2025-12-27 16:27:07,330: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:27:07,335: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.execution.check_an
+d_execute_signals[ab3d2461-0
+bd7-4e52-a1a8-76f526a46240] 
+succeeded in 
+0.5787737320000019s: 
+{'status': 'success', 
+'models_checked': 1, 
+'signals_generated': 0}
+[2025-12-27 16:27:07,606: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from TCS.NS
+[2025-12-27 16:27:07,631: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+TCS: 1/200
+[2025-12-27 16:27:07,636: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/INFY.NS?
+interval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:27:07,925: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from INFY.NS
+[2025-12-27 16:27:07,936: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+INFY: 1/200
+[2025-12-27 16:27:07,939: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HDFCBANK
+.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:08,332: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HDFCBANK.NS
+[2025-12-27 16:27:08,339: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HDFCBANK: 1/200
+[2025-12-27 16:27:08,342: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/ICICIBAN
+K.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:08,705: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from ICICIBANK.NS
+[2025-12-27 16:27:08,715: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+ICICIBANK: 1/200
+[2025-12-27 16:27:08,719: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HINDUNIL
+VR.NS?interval=1d&range=250d
+ (Try 1/3)
+[2025-12-27 16:27:09,014: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HINDUNILVR.NS
+[2025-12-27 16:27:09,030: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HINDUNILVR: 1/200
+[2025-12-27 16:27:09,036: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/ITC.NS?i
+nterval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:27:09,372: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from ITC.NS
+[2025-12-27 16:27:09,384: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+ITC: 1/200
+[2025-12-27 16:27:09,388: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/SBIN.NS?
+interval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:27:09,745: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from SBIN.NS
+[2025-12-27 16:27:09,753: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+SBIN: 1/200
+[2025-12-27 16:27:09,758: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.NS?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:27:10,011: 
+WARNING/ForkPoolWorker-2] 
+ΓÜá BHARTI AIRTEL.NS HTTP 
+status 404
+[2025-12-27 16:27:10,011: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.BO?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:27:10,261: 
+WARNING/ForkPoolWorker-2] 
+ΓÜá BHARTI AIRTEL.BO HTTP 
+status 404
+[2025-12-27 16:27:10,262: 
+ERROR/ForkPoolWorker-2] Γ¥î 
+Failed to fetch BHARTI 
+AIRTEL from Yahoo Finance. 
+Tried: BHARTI AIRTEL.NS, 
+BHARTI AIRTEL.BO. Last 
+error: HTTP 404
+[2025-12-27 16:27:10,265: 
+WARNING/ForkPoolWorker-2] 
+No data from Yahoo for 
+BHARTI AIRTEL
+[2025-12-27 16:27:10,274: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/KOTAKBAN
+K.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:10,584: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from KOTAKBANK.NS
+[2025-12-27 16:27:10,591: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+KOTAKBANK: 1/200
+[2025-12-27 16:27:10,598: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/TATAELXS
+I.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:10,873: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from TATAELXSI.NS
+[2025-12-27 16:27:10,880: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+TATAELXSI: 173/200
+[2025-12-27 16:27:10,884: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HAL.NS?i
+nterval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:27:11,159: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HAL.NS
+[2025-12-27 16:27:11,168: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HAL: 1/200
+[2025-12-27 16:27:11,172: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HAVELLS.
+NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:11,458: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HAVELLS.NS
+[2025-12-27 16:27:11,465: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HAVELLS: 1/200
+[2025-12-27 16:27:11,467: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/HCLTECH.
+NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:11,770: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from HCLTECH.NS
+[2025-12-27 16:27:11,778: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+HCLTECH: 1/200
+[2025-12-27 16:27:11,788: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/JKPAPER.
+NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:27:12,079: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from JKPAPER.NS
+[2025-12-27 16:27:12,100: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+JKPAPER: 173/200
+[2025-12-27 16:27:12,100: 
+INFO/ForkPoolWorker-2] 
+Fresh features computation 
+complete: Computed=0, 
+Cached=0, Failed=15, 
+RateLimited=0
+[2025-12-27 16:27:12,105: 
+INFO/ForkPoolWorker-2] Task 
+app.tasks.fresh_features.com
+pute_fresh_features[c1f0697d
+-ed6f-4486-af76-138c5ae6b38b
+] succeeded in 
+5.3476421820000155s: 
+{'status': 'success', 
+'stats': {'computed': 0, 
+'cached': 0, 'failed': 15, 
+'rate_limited': 0}}
+[2025-12-27 16:27:32,965: 
+INFO/MainProcess] Task app.t
+asks.model_training.train_mo
+del[d4892d1f-6c13-4916-8bae-
+f954e75f0b09] received
+[2025-12-27 16:27:32,972: 
+INFO/ForkPoolWorker-4] 
+Starting transformer model 
+training for TATAELXSI: 
+TATAELXSI (task: d4892d1f-6c
+13-4916-8bae-f954e75f0b09)
+[2025-12-27 16:27:32,980: 
+INFO/ForkPoolWorker-4] Date 
+range filter: 2025-10-28 
+00:00:00 to 2025-12-27 
+23:59:59
+[2025-12-27 16:27:33,012: 
+WARNING/ForkPoolWorker-4] 
+No features found for 
+TATAELXSI. Attempting 
+auto-fetch using yfinance...
+[2025-12-27 16:27:33,014: 
+INFO/ForkPoolWorker-4] 
+Using 60-day period for 
+intraday interval 15m
+[2025-12-27 16:27:33,016: 
+INFO/ForkPoolWorker-4] 
+Fetching TATAELXSI.NS with 
+period=60d, interval=15m
+[2025-12-27 16:27:34,726: 
+ERROR/ForkPoolWorker-4] 
+Failed to get ticker 
+'TATAELXSI.NS' reason: 
+Expecting value: line 1 
+column 1 (char 0)
+[2025-12-27 16:27:35,434: 
+ERROR/ForkPoolWorker-4] 
+TATAELXSI.NS: No price data 
+found, symbol may be 
+delisted (period=60d)
+[2025-12-27 16:27:35,436: 
+WARNING/ForkPoolWorker-4] 
+NSE failed, trying BSE: 
+TATAELXSI.BO
+[2025-12-27 16:27:36,088: 
+ERROR/ForkPoolWorker-4] 
+Failed to get ticker 
+'TATAELXSI.BO' reason: 
+Expecting value: line 1 
+column 1 (char 0)
+[2025-12-27 16:27:36,748: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[94d6387d-34
+74-421c-8384-8d7985afb8bf] 
+received
+[2025-12-27 16:27:36,758: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[91b1b0ba-d689-44
+0f-9e1f-2779db8dd4d8] 
+received
+[2025-12-27 16:27:36,762: 
+ERROR/ForkPoolWorker-4] 
+TATAELXSI.BO: No price data 
+found, symbol may be 
+delisted (period=60d)
+[2025-12-27 16:27:36,772: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[91b1b0ba-d6
+89-440f-9e1f-2779db8dd4d8] 
+succeeded in 
+0.012003567999954612s: 
+{'status': 'no_trades'}
+[2025-12-27 16:27:36,776: 
+ERROR/ForkPoolWorker-4] 
+Auto-fetch failed:
+Traceback (most recent call 
+last):
+  File "/app/app/tasks/model
+_training.py", line 185, in 
+train_model
+    raise ValueError(f"No 
+data returned from Yahoo 
+Finance for {stock_symbol} 
+(tried .NS and .BO)")
+ValueError: No data 
+returned from Yahoo Finance 
+for TATAELXSI (tried .NS 
+and .BO)
+
+[2025-12-27 16:27:36,777: 
+ERROR/ForkPoolWorker-4] 
+Training data not found and 
+auto-fetch failed: No data 
+returned from Yahoo Finance 
+for TATAELXSI (tried .NS 
+and .BO). Stock: TATAELXSI. 
+Date range: 2025-10-28 to 
+2025-12-27. Total features 
+in DB: 8962, Total 
+instruments: 15. Check that 
+yfinance can access Yahoo 
+Finance (internet 
+connection).
+[2025-12-27 16:27:36,777: 
+ERROR/ForkPoolWorker-4] 
+Model training failed: 
+Training data not found and 
+auto-fetch failed: No data 
+returned from Yahoo Finance 
+for TATAELXSI (tried .NS 
+and .BO). Stock: TATAELXSI. 
+Date range: 2025-10-28 to 
+2025-12-27. Total features 
+in DB: 8962, Total 
+instruments: 15. Check that 
+yfinance can access Yahoo 
+Finance (internet 
+connection).
+Traceback (most recent call 
+last):
+  File "/app/app/tasks/model
+_training.py", line 185, in 
+train_model
+    raise ValueError(f"No 
+data returned from Yahoo 
+Finance for {stock_symbol} 
+(tried .NS and .BO)")
+ValueError: No data 
+returned from Yahoo Finance 
+for TATAELXSI (tried .NS 
+and .BO)
+
+During handling of the 
+above exception, another 
+exception occurred:
+
+Traceback (most recent call 
+last):
+  File "/app/app/tasks/model
+_training.py", line 310, in 
+train_model
+    raise 
+ValueError(error_msg)
+ValueError: Training data 
+not found and auto-fetch 
+failed: No data returned 
+from Yahoo Finance for 
+TATAELXSI (tried .NS and 
+.BO). Stock: TATAELXSI. 
+Date range: 2025-10-28 to 
+2025-12-27. Total features 
+in DB: 8962, Total 
+instruments: 15. Check that 
+yfinance can access Yahoo 
+Finance (internet 
+connection).
+[2025-12-27 16:27:36,794: 
+INFO/ForkPoolWorker-2] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[94d638
+7d-3474-421c-8384-8d7985afb8
+bf] succeeded in 
+0.04335067499999923s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:27:36,808: 
+ERROR/ForkPoolWorker-4] 
+Task app.tasks.model_trainin
+g.train_model[d4892d1f-6c13-
+4916-8bae-f954e75f0b09] 
+raised unexpected: 
+ValueError('Training data 
+not found and auto-fetch 
+failed: No data returned 
+from Yahoo Finance for 
+TATAELXSI (tried .NS and 
+.BO). Stock: TATAELXSI. 
+Date range: 2025-10-28 to 
+2025-12-27. Total features 
+in DB: 8962, Total 
+instruments: 15. Check that 
+yfinance can access Yahoo 
+Finance (internet 
+connection).')
+Traceback (most recent call 
+last):
+  File "/app/app/tasks/model
+_training.py", line 185, in 
+train_model
+    raise ValueError(f"No 
+data returned from Yahoo 
+Finance for {stock_symbol} 
+(tried .NS and .BO)")
+ValueError: No data 
+returned from Yahoo Finance 
+for TATAELXSI (tried .NS 
+and .BO)
+
+During handling of the 
+above exception, another 
+exception occurred:
+
+Traceback (most recent call 
+last):
+  File "/usr/local/lib/pytho
+n3.11/site-packages/celery/a
+pp/trace.py", line 477, in 
+trace_task
+    R = retval = fun(*args, 
+**kwargs)
+                 
+^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/pytho
+n3.11/site-packages/celery/a
+pp/trace.py", line 760, in 
+__protected_call__
+    return self.run(*args, 
+**kwargs)
+           
+^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app/tasks/model
+_training.py", line 310, in 
+train_model
+    raise 
+ValueError(error_msg)
+ValueError: Training data 
+not found and auto-fetch 
+failed: No data returned 
+from Yahoo Finance for 
+TATAELXSI (tried .NS and 
+.BO). Stock: TATAELXSI. 
+Date range: 2025-10-28 to 
+2025-12-27. Total features 
+in DB: 8962, Total 
+instruments: 15. Check that 
+yfinance can access Yahoo 
+Finance (internet 
+connection).
+[2025-12-27 16:28:06,720: 
+INFO/MainProcess] Task app.t
+asks.execution.check_and_exe
+cute_signals[b47c6a89-d923-4
+efa-86f7-9f6e24a6c97c] 
+received
+[2025-12-27 16:28:06,724: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:28:06,724: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK STARTED 
+(Multi-Model)
+[2025-12-27 16:28:06,724: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:28:06,729: 
+INFO/ForkPoolWorker-4] Γ£ô 
+Checking signals for 6 
+user(s) with auto_execute 
+enabled
+[2025-12-27 16:28:06,729: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@example.com ---
+[2025-12-27 16:28:06,741: 
+INFO/MainProcess] Task app.t
+asks.fresh_features.compute_
+fresh_features[f11b74d3-4c9b
+-4e7b-bccc-7ae9b3c48f0a] 
+received
+[2025-12-27 16:28:06,744: 
+INFO/ForkPoolWorker-4] 
+Retrieved 1 active model(s) 
+for user 
+testuser@example.com: 
+['RELIANCE(ddREL)']
+[2025-12-27 16:28:06,744: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udcca User has 1 
+model(s) selected
+[2025-12-27 16:28:06,744: 
+INFO/ForkPoolWorker-4] \n   
+ \ud83d\udd0d Model: ddREL 
+(Stock: RELIANCE)
+[2025-12-27 16:28:06,748: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc8 VIX: 9.15
+[2025-12-27 16:28:06,748: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[63118c67-15
+83-43cb-b7b3-5a5f6a4f2df6] 
+received
+[2025-12-27 16:28:06,751: 
+WARNING/ForkPoolWorker-4] 
+Kite WebSocket is down, 
+using fallback data
+[2025-12-27 16:28:06,752: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.execute_p
+aper_trades[cc396cca-a76f-47
+d5-b5be-d35475c79b69] 
+received
+[2025-12-27 16:28:06,753: 
+INFO/ForkPoolWorker-2] 
+Computing fresh features 
+for 15 instruments
+[2025-12-27 16:28:06,755: 
+INFO/MainProcess] Task app.t
+asks.signal_generation.gener
+ate_signals[4098c6a7-8c3e-43
+94-a8b3-613b3237ba6f] 
+received
+[2025-12-27 16:28:06,758: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc5 Feature age: 
+724387s
+[2025-12-27 16:28:06,758: 
+WARNING/ForkPoolWorker-4]   
+    ΓÜá∩╕Å  Features too 
+old (724387s)
+[2025-12-27 16:28:06,758: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+newuser@example.com ---
+[2025-12-27 16:28:06,762: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[7cdc3621-e604-4f
+ee-afc4-ed86029e8365] 
+received
+[2025-12-27 16:28:06,766: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+newuser@example.com: []
+[2025-12-27 16:28:06,766: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for newuser@example.com
+[2025-12-27 16:28:06,766: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:28:06,766: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+test@example.com ---
+[2025-12-27 16:28:06,766: 
+INFO/ForkPoolWorker-1] No 
+unexecuted signals found
+[2025-12-27 16:28:06,768: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[63118c
+67-1583-43cb-b7b3-5a5f6a4f2d
+f6] succeeded in 
+0.014187701000025754s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:28:06,770: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.paper_trading.exec
+ute_paper_trades[cc396cca-a7
+6f-47d5-b5be-d35475c79b69] 
+succeeded in 
+0.016963276000012684s: 
+{'status': 'no_signals'}
+[2025-12-27 16:28:06,774: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user test@example.com: 
+[]
+[2025-12-27 16:28:06,774: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for test@example.com
+[2025-12-27 16:28:06,774: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:28:06,774: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@gmail.com ---
+[2025-12-27 16:28:06,781: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+testuser@gmail.com: []
+[2025-12-27 16:28:06,781: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.NS?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:28:06,781: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for testuser@gmail.com
+[2025-12-27 16:28:06,782: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:28:06,782: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+your@example.com ---
+[2025-12-27 16:28:06,789: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user your@example.com: 
+[]
+[2025-12-27 16:28:06,789: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for your@example.com
+[2025-12-27 16:28:06,790: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:28:06,790: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+admin@jarvistrade.com ---
+[2025-12-27 16:28:06,789: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[7cdc3621-e6
+04-4fee-afc4-ed86029e8365] 
+succeeded in 
+0.015032904000008784s: 
+{'status': 'no_trades'}
+[2025-12-27 16:28:06,796: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+admin@jarvistrade.com: []
+[2025-12-27 16:28:06,796: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for admin@jarvistrade.com
+[2025-12-27 16:28:06,797: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:28:06,797: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:28:06,797: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK COMPLETED: 1 
+models, 0 signals
+[2025-12-27 16:28:06,797: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:28:06,801: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.execution.check_an
+d_execute_signals[b47c6a89-d
+923-4efa-86f7-9f6e24a6c97c] 
+succeeded in 
+0.07888292300003741s: 
+{'status': 'success', 
+'models_checked': 1, 
+'signals_generated': 0}
+[2025-12-27 16:28:06,808: 
+INFO/ForkPoolWorker-3] 
+Checking 1 models for user 
+testuser@example.com
+[2025-12-27 16:28:06,825: 
+WARNING/ForkPoolWorker-3] 
+Features too old for 
+RELIANCE: 724386.82583s
+[2025-12-27 16:28:06,827: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+newuser@example.com
+[2025-12-27 16:28:06,829: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+test@example.com
+[2025-12-27 16:28:06,831: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+testuser@gmail.com
+[2025-12-27 16:28:06,833: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+your@example.com
+[2025-12-27 16:28:06,834: 
+INFO/ForkPoolWorker-3] 
+Checking 0 models for user 
+admin@jarvistrade.com
+[2025-12-27 16:28:06,834: 
+INFO/ForkPoolWorker-3] 
+Signal generation complete: 
+0 new signals
+[2025-12-27 16:28:06,836: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.signal_generation.
+generate_signals[4098c6a7-8c
+3e-4394-a8b3-613b3237ba6f] 
+succeeded in 
+0.06537763700004007s: 
+{'status': 'success', 
+'signals_generated': 0}
+[2025-12-27 16:28:07,051: 
+WARNING/ForkPoolWorker-2] 
+ΓÜá BHARTI AIRTEL.NS HTTP 
+status 404
+[2025-12-27 16:28:07,051: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/BHARTI A
+IRTEL.BO?interval=1d&range=2
+50d (Try 1/3)
+[2025-12-27 16:28:07,321: 
+WARNING/ForkPoolWorker-2] 
+ΓÜá BHARTI AIRTEL.BO HTTP 
+status 404
+[2025-12-27 16:28:07,322: 
+ERROR/ForkPoolWorker-2] Γ¥î 
+Failed to fetch BHARTI 
+AIRTEL from Yahoo Finance. 
+Tried: BHARTI AIRTEL.NS, 
+BHARTI AIRTEL.BO. Last 
+error: HTTP 404
+[2025-12-27 16:28:07,323: 
+WARNING/ForkPoolWorker-2] 
+No data from Yahoo for 
+BHARTI AIRTEL
+[2025-12-27 16:28:07,328: 
+INFO/ForkPoolWorker-2] 
+Fresh features computation 
+complete: Computed=0, 
+Cached=14, Failed=1, 
+RateLimited=0
+[2025-12-27 16:28:07,329: 
+INFO/ForkPoolWorker-2] Task 
+app.tasks.fresh_features.com
+pute_fresh_features[f11b74d3
+-4c9b-4e7b-bccc-7ae9b3c48f0a
+] succeeded in 
+0.5862813010000423s: 
+{'status': 'success', 
+'stats': {'computed': 0, 
+'cached': 14, 'failed': 1, 
+'rate_limited': 0}}
+[2025-12-27 16:28:36,750: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[7b81d26a-11
+62-49e0-a83d-c68e11e0dfed] 
+received
+[2025-12-27 16:28:36,758: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[3ddb69e7-d3d4-4e
+04-9c75-5b2e72394d04] 
+received
+[2025-12-27 16:28:36,782: 
+INFO/ForkPoolWorker-2] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[3ddb69e7-d3
+d4-4e04-9c75-5b2e72394d04] 
+succeeded in 
+0.020414824999988923s: 
+{'status': 'no_trades'}
+[2025-12-27 16:28:36,805: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[7b81d2
+6a-1162-49e0-a83d-c68e11e0df
+ed] succeeded in 
+0.0517135279999934s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:29:06,720: 
+INFO/MainProcess] Task app.t
+asks.execution.check_and_exe
+cute_signals[5f60d0ca-99e6-4
+0f7-bcd2-14e7b89b1b88] 
+received
+[2025-12-27 16:29:06,724: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:29:06,724: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK STARTED 
+(Multi-Model)
+[2025-12-27 16:29:06,724: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:29:06,728: 
+INFO/ForkPoolWorker-4] Γ£ô 
+Checking signals for 6 
+user(s) with auto_execute 
+enabled
+[2025-12-27 16:29:06,728: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@example.com ---
+[2025-12-27 16:29:06,739: 
+INFO/ForkPoolWorker-4] 
+Retrieved 1 active model(s) 
+for user 
+testuser@example.com: 
+['RELIANCE(ddREL)']
+[2025-12-27 16:29:06,740: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udcca User has 1 
+model(s) selected
+[2025-12-27 16:29:06,740: 
+INFO/ForkPoolWorker-4] \n   
+ \ud83d\udd0d Model: ddREL 
+(Stock: RELIANCE)
+[2025-12-27 16:29:06,742: 
+INFO/MainProcess] Task app.t
+asks.fresh_features.compute_
+fresh_features[b6b8fd3d-bdef
+-4306-99dc-2d07473bf67d] 
+received
+[2025-12-27 16:29:06,742: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc8 VIX: 9.15
+[2025-12-27 16:29:06,745: 
+WARNING/ForkPoolWorker-4] 
+Kite WebSocket is down, 
+using fallback data
+[2025-12-27 16:29:06,748: 
+INFO/MainProcess] Task app.t
+asks.position_monitor.monito
+r_open_positions[411272b8-84
+6e-46c7-98b5-7ff6e9fe5ff3] 
+received
+[2025-12-27 16:29:06,751: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.execute_p
+aper_trades[f7576aff-3220-47
+f2-b7f7-ee025a4cea31] 
+received
+[2025-12-27 16:29:06,754: 
+INFO/ForkPoolWorker-4]      
+ \ud83d\udcc5 Feature age: 
+724447s
+[2025-12-27 16:29:06,754: 
+INFO/ForkPoolWorker-2] 
+Computing fresh features 
+for 15 instruments
+[2025-12-27 16:29:06,754: 
+WARNING/ForkPoolWorker-4]   
+    ΓÜá∩╕Å  Features too 
+old (724447s)
+[2025-12-27 16:29:06,755: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+newuser@example.com ---
+[2025-12-27 16:29:06,756: 
+INFO/MainProcess] Task app.t
+asks.signal_generation.gener
+ate_signals[697b53d7-8537-4c
+97-a540-396cc2f5fe53] 
+received
+[2025-12-27 16:29:06,761: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+newuser@example.com: []
+[2025-12-27 16:29:06,761: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for newuser@example.com
+[2025-12-27 16:29:06,762: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:29:06,762: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+test@example.com ---
+[2025-12-27 16:29:06,762: 
+INFO/MainProcess] Task app.t
+asks.paper_trading.monitor_p
+aper_trades[a95594cc-588b-4e
+75-9567-7b03918f331f] 
+received
+[2025-12-27 16:29:06,768: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user test@example.com: 
+[]
+[2025-12-27 16:29:06,768: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for test@example.com
+[2025-12-27 16:29:06,769: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:29:06,769: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+testuser@gmail.com ---
+[2025-12-27 16:29:06,768: 
+INFO/ForkPoolWorker-1] No 
+unexecuted signals found
+[2025-12-27 16:29:06,773: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.paper_trading.exec
+ute_paper_trades[f7576aff-32
+20-47f2-b7f7-ee025a4cea31] 
+succeeded in 
+0.017611850999969647s: 
+{'status': 'no_signals'}
+[2025-12-27 16:29:06,774: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/RELIANCE
+.NS?interval=1d&range=250d 
+(Try 1/3)
+[2025-12-27 16:29:06,774: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.position_monitor.m
+onitor_open_positions[411272
+b8-846e-46c7-98b5-7ff6e9fe5f
+f3] succeeded in 
+0.02158664499995666s: 
+{'status': 'success', 
+'message': 'No open 
+positions', 'closed': 0}
+[2025-12-27 16:29:06,775: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+testuser@gmail.com: []
+[2025-12-27 16:29:06,775: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for testuser@gmail.com
+[2025-12-27 16:29:06,775: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:29:06,775: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+your@example.com ---
+[2025-12-27 16:29:06,783: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user your@example.com: 
+[]
+[2025-12-27 16:29:06,784: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for your@example.com
+[2025-12-27 16:29:06,784: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:29:06,785: 
+INFO/ForkPoolWorker-4] 
+\n--- Processing user: 
+admin@jarvistrade.com ---
+[2025-12-27 16:29:06,791: 
+INFO/ForkPoolWorker-3] Task 
+app.tasks.paper_trading.moni
+tor_paper_trades[a95594cc-58
+8b-4e75-9567-7b03918f331f] 
+succeeded in 
+0.011680839999996806s: 
+{'status': 'no_trades'}
+[2025-12-27 16:29:06,792: 
+INFO/ForkPoolWorker-4] 
+Retrieved 0 active model(s) 
+for user 
+admin@jarvistrade.com: []
+[2025-12-27 16:29:06,792: 
+WARNING/ForkPoolWorker-4]   
+ΓÜá∩╕Å  No models selected 
+for admin@jarvistrade.com
+[2025-12-27 16:29:06,792: 
+INFO/ForkPoolWorker-4]   
+\ud83d\udca1 User needs to 
+select models via API or UI
+[2025-12-27 16:29:06,792: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:29:06,792: 
+INFO/ForkPoolWorker-4] 
+SIGNAL CHECK COMPLETED: 1 
+models, 0 signals
+[2025-12-27 16:29:06,792: 
+INFO/ForkPoolWorker-4] =====
+============================
+============================
+===================
+[2025-12-27 16:29:06,796: 
+INFO/ForkPoolWorker-4] Task 
+app.tasks.execution.check_an
+d_execute_signals[5f60d0ca-9
+9e6-40f7-bcd2-14e7b89b1b88] 
+succeeded in 
+0.07417173999999704s: 
+{'status': 'success', 
+'models_checked': 1, 
+'signals_generated': 0}
+[2025-12-27 16:29:06,801: 
+INFO/ForkPoolWorker-1] 
+Checking 1 models for user 
+testuser@example.com
+[2025-12-27 16:29:06,806: 
+WARNING/ForkPoolWorker-1] 
+Features too old for 
+RELIANCE: 724446.806234s
+[2025-12-27 16:29:06,808: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+newuser@example.com
+[2025-12-27 16:29:06,809: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+test@example.com
+[2025-12-27 16:29:06,810: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+testuser@gmail.com
+[2025-12-27 16:29:06,811: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+your@example.com
+[2025-12-27 16:29:06,812: 
+INFO/ForkPoolWorker-1] 
+Checking 0 models for user 
+admin@jarvistrade.com
+[2025-12-27 16:29:06,812: 
+INFO/ForkPoolWorker-1] 
+Signal generation complete: 
+0 new signals
+[2025-12-27 16:29:06,814: 
+INFO/ForkPoolWorker-1] Task 
+app.tasks.signal_generation.
+generate_signals[697b53d7-85
+37-4c97-a540-396cc2f5fe53] 
+succeeded in 
+0.03869163199999548s: 
+{'status': 'success', 
+'signals_generated': 0}
+[2025-12-27 16:29:07,118: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from RELIANCE.NS
+[2025-12-27 16:29:07,130: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+RELIANCE: 173/200
+[2025-12-27 16:29:07,135: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/TCS.NS?i
+nterval=1d&range=250d (Try 
+1/3)
+[2025-12-27 16:29:07,441: 
+INFO/ForkPoolWorker-2] Γ£ô 
+Successfully fetched 249 
+candles from TCS.NS
+[2025-12-27 16:29:07,452: 
+WARNING/ForkPoolWorker-2] 
+Insufficient candles for 
+TCS: 1/200
+[2025-12-27 16:29:07,454: 
+INFO/ForkPoolWorker-2] 
+Attempting Yahoo Finance: ht
+tps://query1.finance.yahoo.c
+om/v8/finance/chart/INFY.NS?
+interval=1d&range=250d (Try 
+1/3)

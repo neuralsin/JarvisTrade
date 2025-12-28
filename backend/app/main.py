@@ -42,7 +42,7 @@ async def health_check():
     }
 
 # Import and include routers
-from app.routers import auth, dashboard, trades, models, admin, settings as settings_router, buckets, backtest, options, sentiment, instruments, trading_controls
+from app.routers import auth, dashboard, trades, models, admin, settings as settings_router, buckets, backtest, options, sentiment, instruments, trading_controls, csv_upload
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -56,6 +56,7 @@ app.include_router(options.router, prefix="/api/v1/options", tags=["options"])
 app.include_router(sentiment.router, prefix="/api/v1/sentiment", tags=["sentiment"])
 app.include_router(instruments.router, prefix="/api/v1/instruments", tags=["instruments"])
 app.include_router(trading_controls.router)  # Phase 5: Trading controls
+app.include_router(csv_upload.router, prefix="/api/v1/csv", tags=["csv"])  # CSV upload for training
 
 # Phase 6: WebSocket endpoint for real-time signals
 from fastapi import WebSocket, WebSocketDisconnect

@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # Encryption
     KMS_MASTER_KEY: str = "dev-key-replace-in-production"
     
+    # News Sentiment (optional - sentiment defaults to 0.0 if not configured)
+    NEWS_API_KEY: Optional[str] = None
+    
+    # Default stock for scheduled retraining
+    DEFAULT_RETRAIN_STOCK: str = "RELIANCE"
+    
     # Model hyperparameters
     XGBOOST_N_ESTIMATORS: int = 500
     XGBOOST_MAX_DEPTH: int = 6

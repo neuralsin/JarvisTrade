@@ -151,7 +151,14 @@ export default function Models() {
                                     onClick={() => fetchModelDetails(model.id)}
                                 >
                                     <div className="flex justify-between items-center mb-sm">
-                                        <span className="font-semibold">{model.name}</span>
+                                        <div>
+                                            <span className="font-semibold">{model.name}</span>
+                                            {model.stock_symbol && (
+                                                <span className="badge badge-primary ml-sm" style={{ fontSize: '10px' }}>
+                                                    {model.stock_symbol}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div style={{ display: 'flex', gap: 'var(--spacing-xs)', alignItems: 'center' }}>
                                             {model.is_active && <span className="badge badge-success">Active</span>}
                                             <button
@@ -171,8 +178,19 @@ export default function Models() {
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="text-xs text-muted">
-                                        Trained: {new Date(model.trained_at).toLocaleDateString()}
+                                    <div className="text-xs text-muted" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <span style={{
+                                            background: model.type === 'xgboost' ? '#10b981' :
+                                                model.type === 'lstm' ? '#8b5cf6' : '#f59e0b',
+                                            color: 'white',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            fontSize: '10px',
+                                            textTransform: 'uppercase'
+                                        }}>
+                                            {model.type || 'xgboost'}
+                                        </span>
+                                        <span>Trained: {new Date(model.trained_at).toLocaleDateString()}</span>
                                     </div>
                                     {model.metrics && (
                                         <div className="text-sm mt-sm">

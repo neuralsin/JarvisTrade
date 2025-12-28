@@ -47,6 +47,9 @@ class ModelTrainer:
         """
         df = df.copy()
         df['ts_utc'] = pd.to_datetime(df['ts_utc'])
+        # FIXED: Strip timezone info to ensure consistent comparisons
+        if df['ts_utc'].dt.tz is not None:
+            df['ts_utc'] = df['ts_utc'].dt.tz_localize(None)
         df = df.sort_values('ts_utc').reset_index(drop=True)
         
         # Feature columns (must match feature_engineer.py output)
@@ -97,8 +100,16 @@ class ModelTrainer:
         
         if len(X_train) == 0:
             raise ValueError(f"Empty training set! Check date range or data availability.")
+        
+        # FIXED: Use training data as validation if validation set is empty
+        # This prevents XGBoost from crashing when eval_set is empty
         if len(X_val) == 0:
-            logger.warning("Empty validation set - will use train set for early stopping")
+            logger.warning("Empty validation set - using 20% of training data for early stopping")
+            from sklearn.model_selection import train_test_split
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_train, y_train, test_size=0.2, random_state=42
+            )
+            logger.info(f"After split - Train: {len(X_train)}, Val: {len(X_val)}")
         
         return X_train, y_train, X_val, y_val, X_test, y_test, feature_cols
     

@@ -1,16 +1,26 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies with retry logic for transient failures
+RUN for i in 1 2 3; do \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     gcc \
     g++ \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+    postgresql-client && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    break || \
+    (echo "Retry $i..." && rm -rf /var/lib/apt/lists/* && sleep 5); \
+    done
 
 # Upgrade pip first to avoid issues
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Configure pip for flaky network
+ENV PIP_DEFAULT_TIMEOUT=300
+ENV PIP_RETRIES=10
 
 # Copy requirements first for better caching
 COPY requirements.txt .

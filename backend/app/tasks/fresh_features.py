@@ -114,16 +114,19 @@ def compute_fresh_features(self, instruments: list = None):
                         needs_fetch = False
                 
                 if needs_fetch:
-                    # Fetch latest price from Yahoo Finance
-                    from app.tasks.data_ingestion import fetch_historical_yahoo
+                    # Fetch latest price using unified market data fetcher
+                    from app.utils.market_data_fetcher import fetch_ohlcv, DataFetchError
                     
-                    yahoo_df = fetch_historical_yahoo(
-                        symbol=instrument.symbol,
-                        start_date=start_date.strftime('%Y-%m-%d'),
-                        end_date=end_date.strftime('%Y-%m-%d'),
-                        interval='1d',
-                        exchange='NS'
-                    )
+                    try:
+                        yahoo_df = fetch_ohlcv(
+                            symbol=instrument.symbol,
+                            interval='1d',
+                            days=5  # Just need recent data
+                        )
+                    except DataFetchError as e:
+                        logger.warning(f"No data for {instrument.symbol}: {str(e)}")
+                        stats['failed'] += 1
+                        continue
                     
                     if yahoo_df is None or yahoo_df.empty:
                         logger.warning(f"No data from Yahoo for {instrument.symbol}")
@@ -132,7 +135,7 @@ def compute_fresh_features(self, instruments: list = None):
                     
                     # Store latest candle in database
                     latest_row = yahoo_df.iloc[-1]
-                    latest_ts = yahoo_df.index[-1]
+                    latest_ts = latest_row['ts_utc']  # Use column, not index
                     
                     # Check if this candle already exists
                     existing = db.query(HistoricalCandle).filter(

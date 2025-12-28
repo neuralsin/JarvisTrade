@@ -1,14 +1,18 @@
 import { useState } from 'react';
+import CSVUploader from './CSVUploader';
 
 export default function TrainingWizard({ onSubmit, onCancel }) {
     const [step, setStep] = useState(1);
+    const [showCSVUploader, setShowCSVUploader] = useState(false);
     const [formData, setFormData] = useState({
         model_type: '',
         model_name: '',
         instrument_filter: '',
-        interval: '15m',  // NEW: Default candle interval
+        interval: '15m',
         start_date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        end_date: new Date().toISOString().split('T')[0]
+        end_date: new Date().toISOString().split('T')[0],
+        data_source: 'yahoo',  // 'yahoo' or 'csv'
+        csv_dataset_id: null
     });
 
     const modelTypes = {
@@ -284,6 +288,84 @@ export default function TrainingWizard({ onSubmit, onCancel }) {
                                 </div>
                             </div>
 
+                            {/* Data Source Selection - New Section */}
+                            <div style={{ gridColumn: 'span 2', marginTop: 'var(--spacing-md)' }}>
+                                <div className="form-group">
+                                    <label className="form-label">📡 Data Source</label>
+                                    <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                                        <div
+                                            onClick={() => setFormData({ ...formData, data_source: 'yahoo', csv_dataset_id: null })}
+                                            style={{
+                                                flex: 1,
+                                                padding: 'var(--spacing-md)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: formData.data_source === 'yahoo' ? '2px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)',
+                                                background: formData.data_source === 'yahoo' ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-tertiary)',
+                                                cursor: 'pointer',
+                                                textAlign: 'center'
+                                            }}
+                                        >
+                                            <div style={{ fontSize: '1.5rem', marginBottom: 'var(--spacing-xs)' }}>📈</div>
+                                            <div className="font-semibold">Yahoo Finance</div>
+                                            <div className="text-xs text-muted">Auto-fetch from web</div>
+                                        </div>
+                                        <div
+                                            onClick={() => setFormData({ ...formData, data_source: 'csv' })}
+                                            style={{
+                                                flex: 1,
+                                                padding: 'var(--spacing-md)',
+                                                borderRadius: 'var(--radius-md)',
+                                                border: formData.data_source === 'csv' ? '2px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)',
+                                                background: formData.data_source === 'csv' ? 'rgba(139, 92, 246, 0.15)' : 'var(--bg-tertiary)',
+                                                cursor: 'pointer',
+                                                textAlign: 'center'
+                                            }}
+                                        >
+                                            <div style={{ fontSize: '1.5rem', marginBottom: 'var(--spacing-xs)' }}>📁</div>
+                                            <div className="font-semibold">Upload CSV</div>
+                                            <div className="text-xs text-muted">Your own data</div>
+                                        </div>
+                                    </div>
+
+                                    {formData.data_source === 'csv' && (
+                                        <div style={{
+                                            marginTop: 'var(--spacing-md)',
+                                            padding: 'var(--spacing-md)',
+                                            background: 'rgba(139, 92, 246, 0.1)',
+                                            borderRadius: 'var(--radius-md)',
+                                            border: '1px dashed rgba(139, 92, 246, 0.4)',
+                                            textAlign: 'center'
+                                        }}>
+                                            {formData.csv_dataset_id ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-sm)' }}>
+                                                    <span style={{ color: 'var(--color-success)' }}>✅ CSV dataset uploaded</span>
+                                                    <button type="button" className="btn btn-sm btn-outline" onClick={() => setShowCSVUploader(true)}>
+                                                        Replace
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-primary"
+                                                    onClick={() => {
+                                                        if (!formData.instrument_filter) {
+                                                            alert('Please enter a stock symbol first');
+                                                            return;
+                                                        }
+                                                        setShowCSVUploader(true);
+                                                    }}
+                                                >
+                                                    📥 Upload CSV File
+                                                </button>
+                                            )}
+                                            <div className="text-xs text-muted" style={{ marginTop: 'var(--spacing-sm)' }}>
+                                                Required: date, open, high, low, close, volume
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             <div>
                                 <div className="card" style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
                                     <h4 className="mb-sm">Selected Model</h4>
@@ -345,6 +427,16 @@ export default function TrainingWizard({ onSubmit, onCancel }) {
                                             <div className="text-xs text-muted">Date Range</div>
                                             <div className="text-lg">{formData.start_date} to {formData.end_date}</div>
                                         </div>
+                                        <div>
+                                            <div className="text-xs text-muted">Data Source</div>
+                                            <div className="text-lg" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)' }}>
+                                                {formData.data_source === 'csv' ? (
+                                                    <><span>📁</span> Uploaded CSV {formData.csv_dataset_id && <span style={{ color: 'var(--color-success)' }}>✓</span>}</>
+                                                ) : (
+                                                    <><span>📈</span> Yahoo Finance</>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -398,6 +490,22 @@ export default function TrainingWizard({ onSubmit, onCancel }) {
                     </button>
                 </div>
             </div>
+
+            {/* CSV Uploader Modal */}
+            {showCSVUploader && (
+                <CSVUploader
+                    symbol={formData.instrument_filter}
+                    onUpload={(result) => {
+                        setFormData({
+                            ...formData,
+                            csv_dataset_id: result.dataset_id
+                        });
+                        setShowCSVUploader(false);
+                    }}
+                    onClose={() => setShowCSVUploader(false)}
+                />
+            )}
         </div>
     );
 }
+

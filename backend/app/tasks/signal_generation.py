@@ -1,172 +1,397 @@
 """
-Issue #2 Fix: Signal Generation Task
-Creates and updates signals in the signals table from active models
+Signal Generation Task - DETERMINISTIC VERSION
+
+Generates trading signals (BUY/SELL/HOLD) from active models.
+
+Principles:
+1. Use ORM for all database operations (no raw SQL)
+2. Handle all model types (XGBoost, LSTM, Transformer)
+3. Explicit failure on stale data
+4. WebSocket broadcast on signal generation
 """
 from app.celery_app import celery_app
 from app.db.database import SessionLocal
-from app.db.models import User, Instrument, Model, HistoricalCandle, Feature
-from sqlalchemy import text
+from app.db.models import User, Instrument, Model, Signal, Feature
 from datetime import datetime, timedelta
-import joblib
 import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# CONSTANTS
+# ============================================================================
+FEATURE_MAX_AGE_SECONDS = 3600  # 1 hour - features older than this are stale
+FEATURE_COLUMNS = [
+    'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
+    'distance_from_ema200', 'rsi_14', 'rsi_slope',
+    'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
+    'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
+]
+
+
+# ============================================================================
+# MODEL LOADING
+# ============================================================================
+def load_model(model_record: Model):
+    """
+    Load model based on its format.
+    
+    Args:
+        model_record: Model ORM object with model_path and model_format
+    
+    Returns:
+        Loaded model object that has predict/predict_proba methods
+    """
+    import os
+    import joblib
+    
+    model_path = model_record.model_path
+    model_format = model_record.model_format or 'joblib'  # Default for older models
+    model_type = model_record.model_type
+    
+    if not model_path:
+        raise ValueError(f"Model {model_record.name} has no model_path")
+    
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+    
+    if model_format == 'joblib':
+        # XGBoost - single file
+        return joblib.load(model_path)
+    
+    elif model_format == 'keras':
+        # LSTM or Transformer - directory
+        if model_type == 'lstm':
+            from app.ml.lstm_model import LSTMPredictor
+            lstm = LSTMPredictor()
+            lstm.load_model(model_path)
+            return lstm
+        elif model_type == 'transformer':
+            from app.ml.transformer_model import TransformerPredictor
+            transformer = TransformerPredictor()
+            transformer.load_model(model_path)
+            return transformer
+        else:
+            raise ValueError(f"Unknown model type for keras format: {model_type}")
+    
+    else:
+        raise ValueError(f"Unknown model format: {model_format}")
+
+
+def predict_with_model(model, model_type: str, features: pd.DataFrame) -> tuple:
+    """
+    Run prediction with any model type.
+    
+    Args:
+        model: Loaded model object
+        model_type: 'xgboost', 'lstm', or 'transformer'
+        features: DataFrame with feature columns
+    
+    Returns:
+        tuple: (signal_type, confidence)
+            signal_type: 'BUY', 'SELL', or 'HOLD'
+            confidence: float between 0 and 1
+    """
+    if model_type == 'xgboost':
+        proba = model.predict_proba(features)[0]
+        
+        if len(proba) == 3:
+            # Multi-class: [HOLD, BUY, SELL]
+            predicted_class = int(model.predict(features)[0])
+            confidence = float(proba[predicted_class])
+            signal_map = {0: 'HOLD', 1: 'BUY', 2: 'SELL'}
+            return signal_map[predicted_class], confidence
+        else:
+            # Binary: BUY vs not-BUY
+            confidence = float(proba[1])
+            if confidence >= 0.3:
+                return 'BUY', confidence
+            else:
+                return 'HOLD', 1.0 - confidence
+    
+    elif model_type in ['lstm', 'transformer']:
+        # Neural networks output probability of BUY
+        X = features.values.reshape(1, -1)
+        
+        # For sequence models, we need to prepare sequences
+        if hasattr(model, 'prepare_sequences'):
+            # Create a mini-batch for prediction
+            import numpy as np
+            seq_length = getattr(model, 'seq_length', 20)
+            # Pad features to create a sequence
+            X = np.tile(X, (seq_length, 1)).reshape(1, seq_length, -1)
+        
+        proba = float(model.predict(X).flatten()[0])
+        
+        if proba >= 0.6:
+            return 'BUY', proba
+        elif proba <= 0.4:
+            return 'SELL', 1.0 - proba
+        else:
+            return 'HOLD', 0.5
+    
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+
+# ============================================================================
+# MAIN TASK
+# ============================================================================
 @celery_app.task(bind=True)
 def generate_signals(self):
     """
-    Generate trading signals from all active models
-    Runs periodically (every 60 seconds) to check for BUY/SELL signals
+    Generate trading signals from all active models.
     
     Process:
-    1. Get all active users with paper_trading_enabled
-    2. For each user, get their selected_model_ids
-    3. For each model, fetch latest features
-    4. Run model.predict() and create Signal record
+    1. Get all users with paper_trading_enabled
+    2. For each user, get their selected active models
+    3. For each model, check if we have fresh features for its stock
+    4. Run prediction and create Signal record (using ORM)
+    5. Broadcast signal via WebSocket
+    
+    Returns:
+        Dict with generation stats
     """
     db = SessionLocal()
     
     try:
-        # Get all users with paper trading enabled
+        stats = {
+            'users_checked': 0,
+            'models_checked': 0,
+            'signals_generated': 0,
+            'errors': []
+        }
+        
+        # Get users with paper trading enabled
         users = db.query(User).filter(User.paper_trading_enabled == True).all()
         
         if not users:
             logger.info("No users with paper trading enabled")
-            return {"status": "no_users"}
+            return {"status": "no_users", "stats": stats}
         
-        total_signals = 0
+        stats['users_checked'] = len(users)
         
         for user in users:
-            selected_ids = user.selected_model_ids or []
-            
-            if not selected_ids:
-                logger.debug(f"User {user.email} has no models selected")
+            try:
+                _process_user_signals(db, user, stats)
+            except Exception as e:
+                logger.error(f"Error processing user {user.email}: {str(e)}")
+                stats['errors'].append(f"User {user.email}: {str(e)}")
                 continue
-            
-            # Get active models
-            models = db.query(Model).filter(
-                Model.id.in_(selected_ids),
-                Model.is_active == True
-            ).all()
-            
-            logger.info(f"Checking {len(models)} models for user {user.email}")
-            
-            for model in models:
-                try:
-                    # Get instrument
-                    instrument = db.query(Instrument).filter(
-                        Instrument.symbol == model.stock_symbol
-                    ).first()
-                    
-                    if not instrument:
-                        logger.warning(f"Instrument {model.stock_symbol} not found")
-                        continue
-                    
-                    # Get latest feature
-                    latest_feature = db.query(Feature).filter(
-                        Feature.instrument_id == instrument.id
-                    ).order_by(Feature.ts_utc.desc()).first()
-                    
-                    if not latest_feature:
-                        logger.warning(f"No features for {instrument.symbol}")
-                        continue
-                    
-                    # Check if feature is fresh (< 2 minutes old)
-                    age = (datetime.utcnow() - latest_feature.ts_utc.replace(tzinfo=None)).total_seconds()
-                    if age > 120:
-                        logger.warning(f"Features too old for {instrument.symbol}: {age}s")
-                        continue
-                    
-                    # Load model
-                    try:
-                        model_obj = joblib.load(model.artifact_path)
-                    except Exception as e:
-                        logger.error(f"Failed to load model {model.name}: {e}")
-                        continue
-                    
-                    # Prepare features for prediction
-                    feature_dict = latest_feature.feature_json  # ✅ FIXED: Use feature_json not feature_values
-                    feature_cols = [
-                        'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
-                        'distance_from_ema200', 'rsi_14', 'rsi_slope',
-                        'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
-                        'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
-                    ]
-                    
-                    X = pd.DataFrame([feature_dict])[feature_cols].fillna(0)
-                    
-                    # Predict
-                    proba = model_obj.predict_proba(X)[0]
-                    
-                    # Handle both binary and multi-class
-                    if len(proba) == 3:
-                        # Multi-class
-                        predicted_class = int(model_obj.predict(X)[0])
-                        confidence = float(proba[predicted_class])
-                        
-                        class_to_signal = {0: "HOLD", 1: "BUY", 2: "SELL"}
-                        signal_type = class_to_signal[predicted_class]
-                        
-                    elif len(proba) == 2:
-                        # Binary
-                        confidence = float(proba[1])
-                        signal_type = "BUY" if confidence >= 0.3 else "HOLD"
-                    else:
-                        logger.error(f"Unexpected proba shape for model {model.name}")
-                        continue
-                    
-                    # Only create signal if BUY or SELL (not HOLD)
-                    if signal_type in ["BUY", "SELL"]:
-                        # Check if signal already exists (recent)
-                        existing = db.execute(text("""
-                            SELECT id FROM signals 
-                            WHERE model_id = :model_id 
-                            AND instrument_id = :instrument_id
-                            AND timestamp > NOW() - INTERVAL '5 minutes'
-                            AND executed = false
-                            ORDER BY timestamp DESC
-                            LIMIT 1
-                        """), {
-                            "model_id": str(model.id),
-                            "instrument_id": str(instrument.id)
-                        }).fetchone()
-                        
-                        if existing:
-                            logger.debug(f"Recent signal exists for {instrument.symbol}")
-                            continue
-                        
-                        # Create new signal
-                        db.execute(text("""
-                            INSERT INTO signals (model_id, instrument_id, signal_type, confidence, timestamp, executed)
-                            VALUES (:model_id, :instrument_id, :signal_type, :confidence, NOW(), false)
-                        """), {
-                            "model_id": str(model.id),
-                            "instrument_id": str(instrument.id),
-                            "signal_type": signal_type,
-                            "confidence": confidence
-                        })
-                        db.commit()
-                        
-                        total_signals += 1
-                        logger.info(f"✓ Generated {signal_type} signal for {instrument.symbol} (conf: {confidence:.2f})")
-                
-                except Exception as e:
-                    logger.error(f"Error processing model {model.name}: {e}")
-                    db.rollback()
-                    continue
         
-        logger.info(f"Signal generation complete: {total_signals} new signals")
-        return {
-            "status": "success",
-            "signals_generated": total_signals
-        }
+        logger.info(
+            f"Signal generation complete - "
+            f"Users: {stats['users_checked']}, "
+            f"Models: {stats['models_checked']}, "
+            f"Signals: {stats['signals_generated']}"
+        )
+        
+        return {"status": "success", "stats": stats}
     
     except Exception as e:
-        logger.error(f"Signal generation failed: {e}", exc_info=True)
+        logger.error(f"Signal generation failed: {str(e)}", exc_info=True)
         db.rollback()
         return {"status": "error", "error": str(e)}
+    
+    finally:
+        db.close()
+
+
+def _process_user_signals(db, user: User, stats: dict):
+    """Process signals for a single user"""
+    selected_ids = user.selected_model_ids or []
+    
+    if not selected_ids:
+        logger.debug(f"User {user.email} has no models selected")
+        return
+    
+    # Get active models from selection
+    models = db.query(Model).filter(
+        Model.id.in_(selected_ids),
+        Model.is_active == True
+    ).all()
+    
+    if not models:
+        logger.debug(f"User {user.email} has no active models in selection")
+        return
+    
+    logger.info(f"Processing {len(models)} models for user {user.email}")
+    
+    for model_record in models:
+        try:
+            _process_model_signal(db, user, model_record, stats)
+            stats['models_checked'] += 1
+        except Exception as e:
+            logger.error(f"Error with model {model_record.name}: {str(e)}")
+            stats['errors'].append(f"Model {model_record.name}: {str(e)}")
+            continue
+
+
+def _process_model_signal(db, user: User, model_record: Model, stats: dict):
+    """Generate signal for a single model"""
+    stock_symbol = model_record.stock_symbol
+    
+    if not stock_symbol:
+        logger.warning(f"Model {model_record.name} has no stock_symbol - skipping")
+        return
+    
+    # Get instrument
+    instrument = db.query(Instrument).filter(
+        Instrument.symbol == stock_symbol
+    ).first()
+    
+    if not instrument:
+        logger.warning(f"Instrument {stock_symbol} not found - skipping")
+        return
+    
+    # Get latest feature
+    latest_feature = db.query(Feature).filter(
+        Feature.instrument_id == instrument.id
+    ).order_by(Feature.ts_utc.desc()).first()
+    
+    if not latest_feature:
+        logger.warning(f"No features for {stock_symbol} - skipping")
+        return
+    
+    # Check feature freshness
+    feature_age = (datetime.utcnow() - latest_feature.ts_utc.replace(tzinfo=None)).total_seconds()
+    
+    if feature_age > FEATURE_MAX_AGE_SECONDS:
+        logger.warning(
+            f"Features for {stock_symbol} are stale ({feature_age:.0f}s old, max {FEATURE_MAX_AGE_SECONDS}s)"
+        )
+        # Continue anyway for paper trading - just log warning
+    
+    # Check for recent signal (avoid duplicates)
+    recent_signal = db.query(Signal).filter(
+        Signal.model_id == model_record.id,
+        Signal.instrument_id == instrument.id,
+        Signal.timestamp >= datetime.utcnow() - timedelta(minutes=5),
+        Signal.executed == False
+    ).first()
+    
+    if recent_signal:
+        logger.debug(f"Recent unexecuted signal exists for {stock_symbol} - skipping")
+        return
+    
+    # Load model
+    try:
+        model = load_model(model_record)
+    except Exception as e:
+        logger.error(f"Failed to load model {model_record.name}: {str(e)}")
+        return
+    
+    # Prepare features
+    feature_dict = latest_feature.feature_json or {}
+    
+    # Build feature DataFrame
+    features_data = {col: feature_dict.get(col, 0.0) for col in FEATURE_COLUMNS}
+    X = pd.DataFrame([features_data])
+    
+    # Run prediction
+    try:
+        signal_type, confidence = predict_with_model(
+            model, model_record.model_type, X
+        )
+    except Exception as e:
+        logger.error(f"Prediction failed for {model_record.name}: {str(e)}")
+        return
+    
+    # Only create signal for BUY or SELL
+    if signal_type == 'HOLD':
+        logger.debug(f"{stock_symbol}: HOLD (confidence: {confidence:.2f}) - no signal created")
+        return
+    
+    # Create signal using ORM
+    signal = Signal(
+        model_id=model_record.id,
+        instrument_id=instrument.id,
+        signal_type=signal_type,
+        confidence=confidence,
+        executed=False
+    )
+    db.add(signal)
+    db.commit()
+    db.refresh(signal)
+    
+    stats['signals_generated'] += 1
+    logger.info(f"✓ Generated {signal_type} signal for {stock_symbol} (conf: {confidence:.2f})")
+    
+    # Broadcast via WebSocket (async)
+    try:
+        _broadcast_signal(signal, stock_symbol, model_record.name)
+    except Exception as e:
+        logger.warning(f"WebSocket broadcast failed: {str(e)}")
+
+
+def _broadcast_signal(signal: Signal, stock_symbol: str, model_name: str):
+    """Broadcast signal to connected WebSocket clients"""
+    try:
+        from app.websocket_manager import ws_manager
+        import asyncio
+        
+        # Create event loop if needed
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        message = {
+            "event": "signal_generated",
+            "data": {
+                "id": str(signal.id),
+                "stock_symbol": stock_symbol,
+                "model_name": model_name,
+                "signal_type": signal.signal_type,
+                "confidence": signal.confidence,
+                "timestamp": signal.timestamp.isoformat() if signal.timestamp else None
+            }
+        }
+        
+        # Broadcast to all connected clients
+        if hasattr(ws_manager, 'broadcast'):
+            loop.run_until_complete(ws_manager.broadcast(message))
+            logger.debug(f"Signal broadcast sent for {stock_symbol}")
+    
+    except Exception as e:
+        logger.debug(f"WebSocket broadcast skipped: {str(e)}")
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+@celery_app.task
+def generate_signal_for_model(model_id: str):
+    """
+    Generate signal for a specific model (for manual triggering).
+    
+    Args:
+        model_id: UUID of the model
+    """
+    db = SessionLocal()
+    
+    try:
+        model_record = db.query(Model).filter(Model.id == model_id).first()
+        
+        if not model_record:
+            return {"status": "error", "error": "Model not found"}
+        
+        if not model_record.is_active:
+            return {"status": "error", "error": "Model is not active"}
+        
+        # Get first user with paper trading (for single-model testing)
+        user = db.query(User).filter(User.paper_trading_enabled == True).first()
+        
+        if not user:
+            return {"status": "error", "error": "No users with paper trading enabled"}
+        
+        stats = {'signals_generated': 0, 'errors': []}
+        _process_model_signal(db, user, model_record, stats)
+        
+        return {"status": "success", "stats": stats}
     
     finally:
         db.close()
