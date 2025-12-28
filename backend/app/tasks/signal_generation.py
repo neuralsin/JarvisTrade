@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# CONSTANTS
+# CONSTANTS - FIX 4 & 5: Removed sentiment, changed EMA200 -> EMA100
 # ============================================================================
 FEATURE_MAX_AGE_SECONDS = 3600  # 1 hour - features older than this are stale
 FEATURE_COLUMNS = [
-    'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
-    'distance_from_ema200', 'rsi_14', 'rsi_slope',
-    'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
-    'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
+    'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_100',
+    'distance_from_ema100', 'rsi_14', 'rsi_slope',
+    'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix'
+    # Sentiment features REMOVED - contaminating training with 0.0 bias
 ]
 
 
@@ -106,10 +106,13 @@ def predict_with_model(model, model_type: str, features: pd.DataFrame) -> tuple:
         else:
             # Binary: BUY vs not-BUY
             confidence = float(proba[1])
-            if confidence >= 0.3:
+            # FIXED: Raised from 0.3 to 0.65 (was trading garbage probability regions)
+            if confidence >= 0.65:
                 return 'BUY', confidence
+            elif confidence <= 0.35:
+                return 'SELL', 1.0 - confidence
             else:
-                return 'HOLD', 1.0 - confidence
+                return 'HOLD', 0.5
     
     elif model_type in ['lstm', 'transformer']:
         # Neural networks output probability of BUY
@@ -125,9 +128,10 @@ def predict_with_model(model, model_type: str, features: pd.DataFrame) -> tuple:
         
         proba = float(model.predict(X).flatten()[0])
         
-        if proba >= 0.6:
+        # FIXED: Raised thresholds to match AUC useful region (was 0.6/0.4)
+        if proba >= 0.65:
             return 'BUY', proba
-        elif proba <= 0.4:
+        elif proba <= 0.35:
             return 'SELL', 1.0 - proba
         else:
             return 'HOLD', 0.5

@@ -29,14 +29,15 @@ logger = logging.getLogger(__name__)
 
 # ============================================================================
 # CONSTANTS - Single source of truth
+# FIX 4 & 5: Removed sentiment features, changed EMA200 -> EMA100
 # ============================================================================
 MODELS_DIR = Path("models")
 MIN_TRAINING_SAMPLES = 100
 FEATURE_COLUMNS = [
-    'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
-    'distance_from_ema200', 'rsi_14', 'rsi_slope',
-    'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
-    'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
+    'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_100',
+    'distance_from_ema100', 'rsi_14', 'rsi_slope',
+    'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix'
+    # Sentiment features REMOVED - contaminating training with 0.0 bias
 ]
 
 

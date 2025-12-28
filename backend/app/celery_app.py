@@ -30,6 +30,15 @@ celery_app.conf.update(
     # Retry settings
     task_acks_late=True,  # Acknowledge after completion
     task_reject_on_worker_lost=True,  # Retry if worker dies
+    # FIX 6: Task routing - isolate training from signal generation
+    task_routes={
+        'app.tasks.model_training.*': {'queue': 'training'},
+        'app.tasks.signal_generation.*': {'queue': 'signals'},
+        'app.tasks.paper_trading.*': {'queue': 'signals'},
+        'app.tasks.position_monitor.*': {'queue': 'signals'},
+        'app.tasks.fresh_features.*': {'queue': 'signals'},
+    },
+    task_default_queue='default',
 )
 
 # Auto-discover tasks

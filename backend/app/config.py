@@ -82,9 +82,13 @@ class Settings(BaseSettings):
     SIGNAL_CHECK_INTERVAL: int = 60  # seconds
     POSITION_CHECK_INTERVAL: int = 30  # seconds
     
-    # Trading thresholds
-    BUY_PROBABILITY_THRESHOLD: float = 0.3
-    SELL_PROBABILITY_THRESHOLD: float = 0.5
+    # Trading thresholds - FIXED: Raised from 0.3 to 0.65 (matches AUC useful region)
+    BUY_PROBABILITY_THRESHOLD: float = 0.65
+    SELL_PROBABILITY_THRESHOLD: float = 0.35
+    
+    # Model auto-activation - FIXED: Accuracy removed (invalid for imbalanced trading data)
+    AUTO_ACTIVATE_MODELS: bool = True
+    MODEL_MIN_AUC: float = 0.55  # Only AUC matters for ranking quality
     
     # Peak detection settings
     PEAK_EXIT_ENABLED: bool = True

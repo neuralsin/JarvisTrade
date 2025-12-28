@@ -1,6 +1,12 @@
 """
-Spec 4: Multi-Class Labeling - HOLD/BUY/SELL
-Generate target labels for training with intelligent sell signals
+Spec 4: BINARY Labeling - TRADE vs NO-TRADE
+FIX 2: Multi-class was poisoning the pipeline. Binary is correct for trading ML.
+
+Labels:
+    1 = TRADE WORTH TAKING: Price will move favorably with good risk/reward
+    0 = NO TRADE: Not a good entry
+
+Direction (BUY vs SELL) handled separately by trend filter, NOT the model.
 """
 import pandas as pd
 import numpy as np
@@ -11,30 +17,27 @@ logger = logging.getLogger(__name__)
 
 def generate_labels(
     df: pd.DataFrame,
-    buy_target_pct: float = 0.015,
-    buy_stop_pct: float = 0.008,
-    sell_target_pct: float = 0.015,
-    sell_stop_pct: float = 0.008,
-    window: int = 20
+    target_pct: float = 0.015,    # 1.5% target
+    stop_pct: float = 0.008,      # 0.8% stop
+    window: int = 20,
+    use_binary: bool = True       # FIX 2: FORCE BINARY
 ) -> pd.DataFrame:
     """
-    Multi-class labeling for buy/sell signal detection
+    Binary labeling for trade detection.
     
     Labels:
-        0 = HOLD: No clear signal
-        1 = BUY: Price will rise >1.5% before falling >0.8%
-        2 = SELL: Price will fall >1.5% before rising >0.8% (peak exit)
+        1 = TRADE: Good entry - price moves favorably with acceptable risk
+        0 = NO TRADE: Poor entry - avoid
     
     Args:
         df: DataFrame with OHLC data
-        buy_target_pct: Buy target gain (default 1.5%)
-        buy_stop_pct: Buy stop loss (default 0.8%)
-        sell_target_pct: Sell target drop (default 1.5%)
-        sell_stop_pct: Sell stop rise (default 0.8%)
+        target_pct: Target gain/drop (default 1.5%)
+        stop_pct: Stop loss (default 0.8%)
         window: Forward-looking window (default 20)
+        use_binary: Force binary labels (default True)
     
     Returns:
-        DataFrame with 'target' column (0/1/2)
+        DataFrame with 'target' column (0/1)
     """
     df = df.copy().sort_values('ts_utc').reset_index(drop=True)
     targets = []
@@ -45,58 +48,72 @@ def generate_labels(
             continue
         
         current_close = df.loc[idx, 'close']
-        current_high = df.loc[idx, 'high']
-        current_low = df.loc[idx, 'low']
         
         # Define thresholds
-        buy_target_price = current_close * (1 + buy_target_pct)
-        buy_stop_price = current_close * (1 - buy_stop_pct)
-        sell_target_price = current_close * (1 - sell_target_pct)
-        sell_stop_price = current_close * (1 + sell_stop_pct)
+        target_price_up = current_close * (1 + target_pct)
+        stop_price_down = current_close * (1 - stop_pct)
+        target_price_down = current_close * (1 - target_pct)
+        stop_price_up = current_close * (1 + stop_pct)
         
         # Future window
         future_slice = df.iloc[idx+1:idx+1+window]
         
-        # Check BUY signal: Will price rise significantly?
-        buy_target_hit = (future_slice['high'] >= buy_target_price).any()
-        if buy_target_hit:
-            target_hit_idx = future_slice[future_slice['high'] >= buy_target_price].index[0]
+        # Check LONG trade: Price rises to target before hitting stop
+        target_hit_up = (future_slice['high'] >= target_price_up).any()
+        if target_hit_up:
+            target_hit_idx = future_slice[future_slice['high'] >= target_price_up].index[0]
             pre_target = df.loc[idx+1:target_hit_idx]
-            buy_stop_hit = (pre_target['low'] < buy_stop_price).any()
+            stop_hit = (pre_target['low'] < stop_price_down).any()
             
-            if not buy_stop_hit:
-                targets.append(1)  # BUY signal
+            if not stop_hit:
+                targets.append(1)  # GOOD TRADE
                 continue
         
-        # Check SELL signal: Will price fall significantly?
-        sell_target_hit = (future_slice['low'] <= sell_target_price).any()
-        if sell_target_hit:
-            target_hit_idx = future_slice[future_slice['low'] <= sell_target_price].index[0]
+        # Check SHORT trade: Price drops to target before hitting stop
+        target_hit_down = (future_slice['low'] <= target_price_down).any()
+        if target_hit_down:
+            target_hit_idx = future_slice[future_slice['low'] <= target_price_down].index[0]
             pre_target = df.loc[idx+1:target_hit_idx]
-            sell_stop_hit = (pre_target['high'] > sell_stop_price).any()
+            stop_hit = (pre_target['high'] > stop_price_up).any()
             
-            if not sell_stop_hit:
-                targets.append(2)  # SELL signal
+            if not stop_hit:
+                targets.append(1)  # GOOD TRADE (either direction)
                 continue
         
-        # Neither clear signal
-        targets.append(0)  # HOLD
+        # No good trade opportunity
+        targets.append(0)  # NO TRADE
     
     df['target'] = targets
     
     # Log distribution
     valid_count = df['target'].notna().sum()
     total_count = len(df)
-    hold_count = (df['target'] == 0).sum()
-    buy_count = (df['target'] == 1).sum()
-    sell_count = (df['target'] == 2).sum()
+    trade_count = (df['target'] == 1).sum()
+    no_trade_count = (df['target'] == 0).sum()
     
-    logger.info(f"Generated multi-class labels: {valid_count}/{total_count} valid ({valid_count/total_count*100:.1f}%)")
-    logger.info(f"Class distribution: HOLD={hold_count} ({hold_count/valid_count*100:.1f}%), "
-                f"BUY={buy_count} ({buy_count/valid_count*100:.1f}%), "
-                f"SELL={sell_count} ({sell_count/valid_count*100:.1f}%)")
+    logger.info(f"Generated BINARY labels: {valid_count}/{total_count} valid ({valid_count/total_count*100:.1f}%)")
+    logger.info(f"Class distribution: TRADE={trade_count} ({trade_count/valid_count*100:.1f}%), "
+                f"NO_TRADE={no_trade_count} ({no_trade_count/valid_count*100:.1f}%)")
     
-    if buy_count == 0 or sell_count == 0:
-        logger.warning(f"Imbalanced classes! BUY={buy_count}, SELL={sell_count}. Consider adjusting thresholds.")
+    if trade_count < 10:
+        logger.warning(f"Very few TRADE samples ({trade_count}). Consider adjusting thresholds.")
+    
+    trade_ratio = trade_count / valid_count if valid_count > 0 else 0
+    logger.info(f"Trade ratio: {trade_ratio:.1%} (target: 20-40% for good precision)")
     
     return df
+
+
+# Keep old function for backward compatibility but log deprecation
+def generate_labels_multiclass(
+    df: pd.DataFrame,
+    buy_target_pct: float = 0.015,
+    buy_stop_pct: float = 0.008,
+    sell_target_pct: float = 0.015,
+    sell_stop_pct: float = 0.008,
+    window: int = 20
+) -> pd.DataFrame:
+    """DEPRECATED: Multi-class labeling. Use generate_labels() instead."""
+    logger.warning("DEPRECATED: generate_labels_multiclass is using 3-class labeling. "
+                   "This poisons the pipeline. Switching to binary.")
+    return generate_labels(df, target_pct=buy_target_pct, stop_pct=buy_stop_pct, window=window)
