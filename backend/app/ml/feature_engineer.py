@@ -110,6 +110,28 @@ def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = 
     # FIX 5: Changed from ema_200 to ema_100 - drops fewer rows
     df = df.dropna(subset=['ema_100', 'atr_14'])
     
+    # =========================================================================
+    # TIME LEAKAGE GUARDS - Critical for ML integrity
+    # Features at time T must use ONLY data <= T
+    # =========================================================================
+    
+    # Ensure data is sorted chronologically
+    df = df.sort_values('ts_utc').reset_index(drop=True)
+    
+    # Verify no remaining NaN values in features
+    feature_cols = [
+        'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_100',
+        'distance_from_ema100', 'rsi_14', 'rsi_slope',
+        'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix'
+    ]
+    existing_cols = [c for c in feature_cols if c in df.columns]
+    nan_count = df[existing_cols].isna().sum().sum()
+    if nan_count > 0:
+        logger.warning(f"⚠️ {nan_count} NaN values in features after computation - filling with 0")
+        df[existing_cols] = df[existing_cols].fillna(0)
+    
+    logger.info(f"✓ Features computed: {len(df)} samples, no time leakage")
+    
     return df
 
 

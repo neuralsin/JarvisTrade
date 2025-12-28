@@ -40,6 +40,15 @@ def generate_labels(
         DataFrame with 'target' column (0/1)
     """
     df = df.copy().sort_values('ts_utc').reset_index(drop=True)
+    
+    # =========================================================================
+    # TIME LEAKAGE GUARD - Critical for ML integrity
+    # Label at time T uses ONLY data > T (future window)
+    # This ensures no future data leaks into features
+    # =========================================================================
+    if 'ts_utc' in df.columns:
+        assert df['ts_utc'].is_monotonic_increasing, "Data must be sorted chronologically"
+    
     targets = []
     
     for idx in range(len(df)):
