@@ -96,6 +96,66 @@ class Settings(BaseSettings):
     PEAK_MIN_PROFIT_PCT: float = 0.01  # 1% min profit before peak exit
     PEAK_RSI_THRESHOLD: float = 70.0  # Overbought level
     
+    # =========================================================================
+    # V2 DUAL-MODEL ARCHITECTURE CONFIGURATION
+    # Set TRADING_ENGINE_VERSION to 'v2' to enable dual-model trading
+    # =========================================================================
+    
+    # Engine Version Switch
+    TRADING_ENGINE_VERSION: str = "v1"  # "v1" (legacy) or "v2" (dual-model)
+    
+    # V2 Regime Detection
+    V2_ADX_TREND_THRESHOLD: float = 25.0
+    V2_ADX_RANGE_THRESHOLD: float = 20.0
+    V2_ATR_Z_VOLATILE_THRESHOLD: float = 1.0
+    V2_ATR_Z_PANIC_THRESHOLD: float = 2.0
+    V2_REGIME_PERSISTENCE_BARS: int = 5
+    
+    # V2 Model A (Direction Scout)
+    V2_DIRECTION_CLASSES: int = 3  # 0=Neutral, 1=Long, 2=Short
+    V2_DIRECTION_LOOKAHEAD_BARS: int = 8
+    V2_DIRECTION_THRESHOLD_MULTIPLIER: float = 0.5
+    
+    # V2 Model B (Quality Gatekeeper)
+    V2_QUALITY_TARGET_ATR_MULT: float = 1.5
+    V2_QUALITY_STOP_ATR_MULT: float = 1.0
+    V2_QUALITY_TIME_LIMIT_BARS: int = 24
+    V2_QUALITY_SLIPPAGE_PCT: float = 0.0005
+    
+    # V2 Direction Confidence Thresholds (per regime)
+    V2_DIRECTION_CONF_TREND_STABLE: float = 0.55
+    V2_DIRECTION_CONF_TREND_VOLATILE: float = 0.60
+    V2_DIRECTION_CONF_RANGE_QUIET: float = 0.65
+    
+    # V2 Quality Hurdles (per regime)
+    V2_QUALITY_HURDLE_TREND_STABLE: float = 0.60
+    V2_QUALITY_HURDLE_TREND_VOLATILE: float = 0.65
+    V2_QUALITY_HURDLE_RANGE_QUIET: float = 0.68
+    V2_QUALITY_HURDLE_CHOP_PANIC: float = 0.75
+    
+    # V2 Expectancy Engine
+    V2_MIN_EXPECTANCY_R: float = 0.20
+    V2_BOOTSTRAP_AVG_WIN_R: float = 1.5
+    V2_BOOTSTRAP_AVG_LOSS_R: float = 1.0
+    V2_BOOTSTRAP_WIN_RATE: float = 0.50
+    
+    # V2 Execution
+    V2_MAX_POSITIONS: int = 3
+    V2_RISK_PERCENT: float = 0.01
+    V2_PANIC_RISK_REDUCTION: float = 0.5
+    
+    # V2 Exit Engine
+    V2_TIME_STOP_BARS: int = 24
+    V2_TIME_STOP_MIN_PROFIT_ATR: float = 0.2
+    V2_REVERSAL_EXIT_CONF: float = 0.65
+    V2_REVERSAL_MIN_BARS_HELD: int = 3
+    V2_REVERSAL_PERSIST_BARS: int = 2
+    
+    # V2 Online Learning
+    V2_TRADE_MEMORY_UPDATE_INTERVAL: int = 20
+    V2_ROLLING_WINDOW_TRADES: int = 100
+    V2_MODEL_KILL_THRESHOLD_TRADES: int = 50
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

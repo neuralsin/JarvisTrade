@@ -42,6 +42,16 @@ export default function TrainingWizard({ onSubmit, onCancel }) {
             description: 'State-of-the-art attention mechanism. Best performance with large datasets.',
             features: ['Advanced patterns', 'Attention mechanism', 'Best accuracy', 'Complex strategies'],
             bestFor: 'Professional trading, large portfolios, maximum performance'
+        },
+        v2_dual: {
+            name: 'V2 Dual-Model',
+            icon: '🎯',
+            time: '15-30 minutes',
+            level: 'Professional',
+            description: 'Advanced dual-model architecture: Direction Scout + Quality Gatekeeper. Supports Long AND Short trades with regime-aware execution.',
+            features: ['Long & Short trading', 'Market regime detection', 'Expectancy filtering', 'Triple Barrier labels'],
+            bestFor: 'Professional bi-directional trading, regime-adaptive strategies',
+            isV2: true
         }
     };
 

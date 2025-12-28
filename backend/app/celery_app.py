@@ -33,7 +33,9 @@ celery_app.conf.update(
     # FIX 6: Task routing - isolate training from signal generation
     task_routes={
         'app.tasks.model_training.*': {'queue': 'training'},
+        'app.tasks.model_training_v2.*': {'queue': 'training'},  # V2 training
         'app.tasks.signal_generation.*': {'queue': 'signals'},
+        'app.tasks.signal_generation_v2.*': {'queue': 'signals'},  # V2 signals
         'app.tasks.paper_trading.*': {'queue': 'signals'},
         'app.tasks.position_monitor.*': {'queue': 'signals'},
         'app.tasks.fresh_features.*': {'queue': 'signals'},
@@ -101,6 +103,23 @@ celery_app.conf.beat_schedule = {
     'fetch-news-sentiment': {
         'task': 'app.tasks.news_sentiment.fetch_and_analyze_news',
         'schedule': crontab(hour=6, minute=0),  # 6 AM UTC daily
+    },
+    
+    # =========================================================================
+    # V2 DUAL-MODEL ARCHITECTURE TASKS
+    # These run alongside V1 but only execute if TRADING_ENGINE_VERSION == 'v2'
+    # =========================================================================
+    
+    # V2 Signal generation - every 5 minutes
+    'generate-signals-v2': {
+        'task': 'app.tasks.signal_generation_v2.generate_signals_v2',
+        'schedule': 300.0,  # Every 5 minutes
+    },
+    
+    # V2 Weekly retraining
+    'retrain-weekly-v2': {
+        'task': 'app.tasks.model_training_v2.scheduled_retrain_v2',
+        'schedule': crontab(hour=2, minute=30, day_of_week=1),  # Monday 2:30 AM UTC
     },
 }
 

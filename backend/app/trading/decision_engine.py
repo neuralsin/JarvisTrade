@@ -114,6 +114,21 @@ class DecisionEngine:
         X = features_to_dataframe(feature_json)
         proba = model.predict_proba(X)[0]
         
+        # =========================================================================
+        # INVERTED SIGNAL WEAPONIZATION - Apply inversion at prediction time
+        # =========================================================================
+        is_inverted = getattr(model, 'is_inverted', False) if hasattr(model, 'is_inverted') else False
+        
+        # Check if model has DB metadata (for models loaded from disk)
+        model_metadata = getattr(model, 'metadata', {})
+        if isinstance(model_metadata, dict):
+            is_inverted = model_metadata.get('is_inverted', is_inverted)
+        
+        if is_inverted:
+            logger.info("🔄 Applying inversion to prediction (inverted model)")
+            # Flip all probabilities
+            proba = 1.0 - proba
+        
         # Detect model type by probability array shape
         if len(proba) == 3:
             # Multi-class model (HOLD/BUY/SELL)
@@ -173,6 +188,15 @@ class DecisionEngine:
         risk_per_share = entry_price - stop_price
         risk_amount = self.account_capital * self.risk_per_trade
         qty = math.floor(risk_amount / risk_per_share) if risk_per_share > 0 else 0
+        
+        # =========================================================================
+        # INVERTED SIGNAL WEAPONIZATION - Position size penalty
+        # Inverted models get 0.7x position size until proven
+        # =========================================================================
+        if is_inverted:
+            from app.ml.model_inverter import get_position_size_multiplier
+            qty = math.floor(qty * get_position_size_multiplier(is_inverted=True))
+            logger.info(f"🔄 Inverted model: applying 0.7x position size penalty → qty={qty}")
         
         if qty <= 0:
             return {"action": "NO_TRADE", "reason": "QTY_ZERO", "prob": float(prob)}

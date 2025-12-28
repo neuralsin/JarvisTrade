@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function TradingControls() {
@@ -16,7 +15,7 @@ export default function TradingControls() {
         fetchTradingStatus();
         fetchAvailableModels();
         fetchSelectedModels();
-        const interval = setInterval(fetchSelectedModels, 30000); // Refresh every 30s
+        const interval = setInterval(fetchSelectedModels, 30000);
         return () => clearInterval(interval);
     }, []);
 
@@ -153,72 +152,91 @@ export default function TradingControls() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="flex justify-center items-center" style={{ height: '400px' }}>
+                <div className="spinner"></div>
             </div>
         );
     }
 
     return (
-        <div className="p-6 space-y-6 max-w-6xl mx-auto">
+        <div className="fade-in">
             {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900">Trading Controls</h1>
-                <p className="text-gray-600 mt-2">
-                    Configure paper trading and select models to run
-                </p>
+            <div className="flex justify-between items-center mb-lg">
+                <div>
+                    <h1>Trading Controls</h1>
+                    <p className="text-muted text-sm">
+                        Configure paper trading and select models to run
+                    </p>
+                </div>
             </div>
 
-            {/* Paper Trading Toggle */}
-            <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold mb-4">Paper Trading</h2>
-                <div className="flex items-center justify-between">
+            {/* Paper Trading Toggle Card */}
+            <div className="card mb-lg">
+                <div className="card-header">
+                    <h3 className="card-title">Paper Trading</h3>
+                    <div
+                        className="toggle-switch"
+                        onClick={() => !actionLoading && togglePaperTrading(!status?.paper_trading_enabled)}
+                        style={{
+                            width: '56px',
+                            height: '32px',
+                            borderRadius: '16px',
+                            background: status?.paper_trading_enabled ? 'var(--accent-success)' : 'var(--bg-tertiary)',
+                            cursor: actionLoading ? 'not-allowed' : 'pointer',
+                            opacity: actionLoading ? 0.5 : 1,
+                            transition: 'background var(--transition-base)',
+                            position: 'relative'
+                        }}
+                    >
+                        <div style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: 'white',
+                            position: 'absolute',
+                            top: '4px',
+                            left: status?.paper_trading_enabled ? '28px' : '4px',
+                            transition: 'left var(--transition-base)',
+                            boxShadow: 'var(--shadow-sm)'
+                        }} />
+                    </div>
+                </div>
+                <div className="flex items-center gap-md">
                     <div>
-                        <p className="font-medium text-gray-900">Master Switch</p>
-                        <p className="text-sm text-gray-600">
+                        <p className="font-semibold">Master Switch</p>
+                        <p className="text-muted text-sm">
                             Enable or disable all paper trading activity
                         </p>
                     </div>
-                    <button
-                        onClick={() => togglePaperTrading(!status?.paper_trading_enabled)}
-                        disabled={actionLoading}
-                        className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${status?.paper_trading_enabled ? 'bg-green-600' : 'bg-gray-300'
-                            } ${actionLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                        <span
-                            className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${status?.paper_trading_enabled ? 'translate-x-7' : 'translate-x-1'
-                                }`}
-                        />
-                    </button>
                 </div>
                 {status?.paper_trading_enabled && (
-                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="flex items-center gap-2">
-                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span className="font-medium text-green-800">
-                                Paper Trading Active
-                            </span>
+                    <div className="mt-md" style={{
+                        padding: 'var(--spacing-md)',
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        borderRadius: 'var(--radius-md)'
+                    }}>
+                        <div className="flex items-center gap-sm">
+                            <span className="text-success">✓</span>
+                            <span className="font-medium text-success">Paper Trading Active</span>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Active Models */}
+            {/* Active Models Summary */}
             {status?.selected_model_count > 0 && (
-                <div className="bg-white rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4">Active Models</h2>
-                    <p className="text-sm text-gray-600 mb-4">
-                        {status.selected_model_count} model(s) running on{' '}
-                        {status.selected_stocks.length} stock(s)
+                <div className="card mb-lg">
+                    <div className="card-header">
+                        <h3 className="card-title">Active Models</h3>
+                        <span className="badge badge-info">{status.selected_model_count}</span>
+                    </div>
+                    <p className="text-muted text-sm mb-md">
+                        {status.selected_model_count} model(s) running on {status.selected_stocks.length} stock(s)
                     </p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex gap-sm" style={{ flexWrap: 'wrap' }}>
                         {status.selected_stocks.map((stock) => (
-                            <span
-                                key={stock}
-                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
-                            >
+                            <span key={stock} className="badge badge-info">
                                 {stock}
                             </span>
                         ))}
@@ -227,78 +245,95 @@ export default function TradingControls() {
             )}
 
             {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-                <div className="flex flex-wrap gap-3">
+            <div className="card mb-lg">
+                <div className="card-header">
+                    <h3 className="card-title">Quick Actions</h3>
+                </div>
+                <div className="flex gap-md" style={{ flexWrap: 'wrap' }}>
                     <button
                         onClick={selectAllModels}
                         disabled={actionLoading}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="btn btn-primary"
                     >
                         Select All Models
                     </button>
                     <button
                         onClick={clearAllSelections}
                         disabled={actionLoading}
-                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="btn btn-outline"
                     >
                         Clear All
                     </button>
                     <button
                         onClick={checkNow}
                         disabled={actionLoading}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="btn btn-success"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Check Signals Now
+                        ▶ Check Signals Now
                     </button>
                 </div>
             </div>
 
             {/* Model Selection */}
-            <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-xl font-semibold mb-4">Model Selection</h2>
-                <div className="space-y-6">
+            <div className="card">
+                <div className="card-header">
+                    <h3 className="card-title">Model Selection</h3>
+                </div>
+                <div className="flex flex-col gap-lg">
                     {availableModels.map((stockGroup) => (
-                        <div key={stockGroup.stock_symbol} className="border rounded-lg p-4">
-                            <h3 className="font-bold text-lg mb-3 text-gray-900">{stockGroup.stock_symbol}</h3>
-                            <div className="space-y-2">
+                        <div key={stockGroup.stock_symbol} style={{
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: 'var(--radius-md)',
+                            padding: 'var(--spacing-md)'
+                        }}>
+                            <h4 className="mb-md" style={{ color: 'var(--accent-primary)' }}>
+                                {stockGroup.stock_symbol}
+                            </h4>
+                            <div className="flex flex-col gap-sm">
                                 {stockGroup.models.map((model) => (
                                     <div
                                         key={model.id}
-                                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                                        className="flex items-center justify-between"
+                                        style={{
+                                            padding: 'var(--spacing-md)',
+                                            background: 'var(--bg-tertiary)',
+                                            borderRadius: 'var(--radius-sm)',
+                                            transition: 'background var(--transition-fast)'
+                                        }}
                                     >
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-md">
                                             <input
                                                 type="checkbox"
                                                 checked={model.is_selected}
                                                 onChange={() => toggleModelSelection(model.id, model.is_selected)}
                                                 disabled={!model.is_active}
-                                                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                style={{
+                                                    width: '20px',
+                                                    height: '20px',
+                                                    accentColor: 'var(--accent-primary)',
+                                                    cursor: model.is_active ? 'pointer' : 'not-allowed'
+                                                }}
                                             />
                                             <div>
-                                                <p className="font-medium text-gray-900">{model.name}</p>
-                                                <p className="text-sm text-gray-600">
-                                                    {model.model_type.toUpperCase()} •{' '}
+                                                <p className="font-medium">{model.name}</p>
+                                                <p className="text-muted text-xs">
+                                                    {model.model_type.toUpperCase()} • {' '}
                                                     {model.is_active ? (
-                                                        <span className="text-green-600 font-medium">Active</span>
+                                                        <span className="text-success">Active</span>
                                                     ) : (
-                                                        <span className="text-gray-400">Inactive</span>
+                                                        <span className="text-muted">Inactive</span>
                                                     )}
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
+                                        <div style={{ textAlign: 'right' }}>
                                             {model.metrics?.auc_roc && (
-                                                <p className="text-sm text-gray-700">
+                                                <p className="text-sm">
                                                     AUC: <span className="font-semibold">{model.metrics.auc_roc.toFixed(3)}</span>
                                                 </p>
                                             )}
                                             {model.metrics?.accuracy && (
-                                                <p className="text-sm text-gray-600">
+                                                <p className="text-muted text-xs">
                                                     Acc: {(model.metrics.accuracy * 100).toFixed(1)}%
                                                 </p>
                                             )}
@@ -310,12 +345,10 @@ export default function TradingControls() {
                     ))}
 
                     {availableModels.length === 0 && (
-                        <div className="text-center py-12 text-gray-500">
-                            <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            <p className="text-lg font-medium">No models available</p>
-                            <p className="text-sm mt-1">Train models first in the Models section</p>
+                        <div className="text-center" style={{ padding: 'var(--spacing-2xl)' }}>
+                            <div className="text-muted mb-md" style={{ fontSize: '3rem' }}>⚠️</div>
+                            <p className="font-medium text-muted">No models available</p>
+                            <p className="text-muted text-sm mt-sm">Train models first in the Models section</p>
                         </div>
                     )}
                 </div>

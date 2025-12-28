@@ -21,14 +21,16 @@ export default function Dashboard() {
             console.log('Kite status from API:', response.data);
             setKiteStatus({
                 hasCredentials: response.data.has_kite_credentials,
-                hasToken: false
+                hasToken: response.data.has_kite_access_token || false,
+                source: response.data.kite_credentials_source
             });
         } catch (error) {
             console.log('Auth check failed (likely not logged in), assuming credentials exist from .env');
             // If auth fails, assume credentials are in .env since backend is configured
             setKiteStatus({
                 hasCredentials: true, // Assume true if .env is configured
-                hasToken: false
+                hasToken: false,
+                source: 'env'
             });
         }
     };
@@ -98,13 +100,25 @@ export default function Dashboard() {
                     <button
                         className="btn btn-outline"
                         onClick={handleKiteAuthorization}
+                        disabled={kiteStatus.hasToken}
                         style={{
-                            borderColor: kiteStatus.hasCredentials ? '#10b981' : '#6b7280',
-                            color: kiteStatus.hasCredentials ? '#10b981' : '#9ca3af'
+                            borderColor: kiteStatus.hasToken ? '#10b981' : (kiteStatus.hasCredentials ? '#f59e0b' : '#6b7280'),
+                            color: kiteStatus.hasToken ? '#10b981' : (kiteStatus.hasCredentials ? '#f59e0b' : '#9ca3af'),
+                            cursor: kiteStatus.hasToken ? 'default' : 'pointer'
                         }}
-                        title={kiteStatus.hasCredentials ? 'Click to authorize Kite API' : 'Add Kite credentials to .env first'}
+                        title={
+                            kiteStatus.hasToken
+                                ? 'Kite API connected!'
+                                : (kiteStatus.hasCredentials
+                                    ? 'Click to authorize Kite API'
+                                    : 'Add Kite credentials to .env first')
+                        }
                     >
-                        {kiteStatus.hasCredentials ? '✓' : '○'} Connect Kite API
+                        {kiteStatus.hasToken
+                            ? '✓ Kite Connected'
+                            : (kiteStatus.hasCredentials
+                                ? '🔑 Authorize Kite'
+                                : '○ Connect Kite API')}
                     </button>
 
                     <button
@@ -123,7 +137,7 @@ export default function Dashboard() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-4 mb-lg">
+            <div className="grid grid-cols-5 mb-lg">
                 <div className="card stat-card">
                     <div className="stat-value">{stats?.total_trades || 0}</div>
                     <div className="stat-label">Total Trades</div>
@@ -141,6 +155,34 @@ export default function Dashboard() {
                 <div className="card stat-card">
                     <div className="stat-value">₹{(stats?.avg_pnl || 0).toFixed(0)}</div>
                     <div className="stat-label">Avg P&L</div>
+                </div>
+                {/* V2 Regime Status */}
+                <div className="card stat-card" style={{
+                    background: stats?.engine_version === 'v2'
+                        ? stats?.current_regime === 'TREND_STABLE' ? 'rgba(16, 185, 129, 0.1)'
+                            : stats?.current_regime === 'TREND_VOLATILE' ? 'rgba(245, 158, 11, 0.1)'
+                                : stats?.current_regime === 'RANGE_QUIET' ? 'rgba(59, 130, 246, 0.1)'
+                                    : stats?.current_regime === 'CHOP_PANIC' ? 'rgba(239, 68, 68, 0.1)'
+                                        : 'var(--bg-secondary)'
+                        : 'var(--bg-secondary)',
+                    border: stats?.engine_version === 'v2' ? '1px solid rgba(139, 92, 246, 0.3)' : 'none'
+                }}>
+                    <div className="stat-value" style={{ fontSize: '1.2rem' }}>
+                        {stats?.engine_version === 'v2' ? (
+                            <>
+                                {stats?.current_regime === 'TREND_STABLE' && '📈 TREND'}
+                                {stats?.current_regime === 'TREND_VOLATILE' && '⚡ VOLATILE'}
+                                {stats?.current_regime === 'RANGE_QUIET' && '➖ RANGE'}
+                                {stats?.current_regime === 'CHOP_PANIC' && '🛑 PANIC'}
+                                {!stats?.current_regime && '🎯 V2'}
+                            </>
+                        ) : (
+                            'V1'
+                        )}
+                    </div>
+                    <div className="stat-label">
+                        {stats?.engine_version === 'v2' ? 'Market Regime' : 'Engine'}
+                    </div>
                 </div>
             </div>
 

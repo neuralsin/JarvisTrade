@@ -145,16 +145,43 @@ def fetch_historical_yahoo(symbol: str, start_date: str, end_date: str, interval
     else:
         exchanges_to_try = ['NS', 'BO']  # Default: try both
     
-    # Calculate range from dates
+    # Calculate range from dates with Yahoo Finance limits
+    # Yahoo Finance API has strict limits for intraday data:
+    # - 1m: max 7 days
+    # - 5m, 15m, 30m: max 60 days
+    # - 1h: max 730 days (2 years)
+    # - 1d, 1wk, 1mo: no practical limit
+    
+    INTERVAL_MAX_DAYS = {
+        '1m': 7,
+        '5m': 60,
+        '15m': 60,
+        '30m': 60,
+        '1h': 730,
+        '1d': 3650,  # 10 years
+        '1wk': 3650,
+        '1mo': 3650
+    }
+    
+    max_days = INTERVAL_MAX_DAYS.get(interval, 60)
+    
     if start_date and end_date:
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
         end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-        days = (end_dt - start_dt).days
-        range_param = f'{days}d'
+        requested_days = (end_dt - start_dt).days
+        
+        # Cap to API limit
+        if requested_days > max_days:
+            logger.warning(
+                f"Requested {requested_days} days for {interval} interval, "
+                f"but Yahoo Finance limits to {max_days} days. Using {max_days}d."
+            )
+            range_param = f'{max_days}d'
+        else:
+            range_param = f'{requested_days}d'
     else:
         # Default ranges based on interval
-        intraday = ['1m', '5m', '15m', '30m', '1h']
-        range_param = '60d' if interval in intraday else '365d'
+        range_param = f'{max_days}d'
     
     last_error = None
     

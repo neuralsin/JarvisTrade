@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
-
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
 
@@ -14,7 +13,6 @@ export default function SignalMonitor() {
     const ws = useRef(null);
     const [availableStocks, setAvailableStocks] = useState([]);
 
-    // Fetch recent signals on mount
     useEffect(() => {
         fetchRecentSignals();
         connectWebSocket();
@@ -25,7 +23,6 @@ export default function SignalMonitor() {
         };
     }, []);
 
-    // Filter signals when filters change
     useEffect(() => {
         let filtered = signals;
 
@@ -50,7 +47,6 @@ export default function SignalMonitor() {
 
             setSignals(response.data);
 
-            // Extract unique stocks
             const stocks = [...new Set(response.data.map(s => s.stock_symbol))];
             setAvailableStocks(stocks);
         } catch (error) {
@@ -66,7 +62,6 @@ export default function SignalMonitor() {
             console.log('WebSocket connected');
             setConnected(true);
 
-            // Send ping every 30s to keep alive
             const pingInterval = setInterval(() => {
                 if (ws.current?.readyState === WebSocket.OPEN) {
                     ws.current.send('ping');
@@ -81,7 +76,6 @@ export default function SignalMonitor() {
                 const data = JSON.parse(event.data);
 
                 if (data.event === 'signal_generated') {
-                    // Add new signal to top of list
                     setSignals(prev => [data.data, ...prev].slice(0, 100));
                     setAvailableStocks(prev => {
                         const stocks = new Set(prev);
@@ -89,7 +83,6 @@ export default function SignalMonitor() {
                         return Array.from(stocks);
                     });
                 } else if (data.event === 'trade_executed') {
-                    // Update signal with trade_id
                     setSignals(prev => prev.map(s =>
                         s.id === data.data.signal_id
                             ? { ...s, trade_id: data.data.trade_id }
@@ -105,12 +98,10 @@ export default function SignalMonitor() {
             console.log('WebSocket disconnected');
             setConnected(false);
 
-            // Clear ping interval
             if (ws.current?.pingInterval) {
                 clearInterval(ws.current.pingInterval);
             }
 
-            // Reconnect after 5s
             setTimeout(connectWebSocket, 5000);
         };
 
@@ -125,14 +116,25 @@ export default function SignalMonitor() {
         const percent = Math.round(probability * 100);
         const width = `${percent}%`;
 
-        let bgColor = 'bg-gray-400';
-        if (percent >= 70) bgColor = 'bg-green-500';
-        else if (percent >= 50) bgColor = 'bg-yellow-500';
-        else bgColor = 'bg-red-500';
+        let bgColor = 'var(--accent-warning)';
+        if (percent >= 70) bgColor = 'var(--accent-success)';
+        else if (percent >= 50) bgColor = 'var(--accent-warning)';
+        else bgColor = 'var(--accent-danger)';
 
         return (
-            <div className="w-24 bg-gray-200 rounded-full h-2">
-                <div className={`${bgColor} h-2 rounded-full transition-all duration-300`} style={{ width }} />
+            <div style={{
+                width: '100px',
+                height: '8px',
+                background: 'var(--bg-tertiary)',
+                borderRadius: 'var(--radius-sm)'
+            }}>
+                <div style={{
+                    width: width,
+                    height: '100%',
+                    background: bgColor,
+                    borderRadius: 'var(--radius-sm)',
+                    transition: 'width var(--transition-base)'
+                }} />
             </div>
         );
     };
@@ -150,32 +152,38 @@ export default function SignalMonitor() {
     const rejectCount = filteredSignals.filter(s => s.action === 'REJECT').length;
 
     return (
-        <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="fade-in">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center mb-lg">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Signal Monitor</h1>
-                    <p className="text-gray-600 mt-2">
+                    <h1>Signal Monitor</h1>
+                    <p className="text-muted text-sm">
                         Real-time signal tracking and decision logging
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <span className="text-sm font-semibold uppercase tracking-wide">
+                <div className="flex items-center gap-sm">
+                    <div style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        background: connected ? 'var(--accent-success)' : 'var(--accent-danger)',
+                        boxShadow: connected ? 'var(--shadow-glow-success)' : 'none'
+                    }} />
+                    <span className="font-semibold text-sm" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {connected ? 'LIVE' : 'DISCONNECTED'}
                     </span>
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex gap-4 items-end">
-                    <div className="flex-1">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">Stock Symbol</label>
+            <div className="card mb-lg">
+                <div className="flex gap-lg items-end" style={{ flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                        <label className="form-label">Stock Symbol</label>
                         <select
                             value={stockFilter}
                             onChange={(e) => setStockFilter(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="form-input"
                         >
                             <option value="ALL">All Stocks</option>
                             {availableStocks.map(stock => (
@@ -184,12 +192,12 @@ export default function SignalMonitor() {
                         </select>
                     </div>
 
-                    <div className="flex-1">
-                        <label className="text-sm font-medium text-gray-700 mb-2 block">Action Type</label>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                        <label className="form-label">Action Type</label>
                         <select
                             value={actionFilter}
                             onChange={(e) => setActionFilter(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="form-input"
                         >
                             <option value="ALL">All Actions</option>
                             <option value="EXECUTE">Execute Only</option>
@@ -197,108 +205,118 @@ export default function SignalMonitor() {
                         </select>
                     </div>
 
-                    <button
-                        onClick={fetchRecentSignals}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
+                    <button onClick={fetchRecentSignals} className="btn btn-primary">
                         Refresh
                     </button>
                 </div>
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white rounded-lg shadow p-6">
-                    <div className="text-center">
-                        <div className="text-4xl font-bold text-gray-900">{filteredSignals.length}</div>
-                        <div className="text-sm text-gray-600 mt-2 font-medium">Total Signals</div>
-                    </div>
+            <div className="grid grid-cols-3 mb-lg">
+                <div className="card stat-card">
+                    <div className="stat-value">{filteredSignals.length}</div>
+                    <div className="stat-label">Total Signals</div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow p-6">
-                    <div className="text-center">
-                        <div className="text-4xl font-bold text-green-600">{executeCount}</div>
-                        <div className="text-sm text-gray-600 mt-2 font-medium">Executed</div>
-                    </div>
+                <div className="card stat-card">
+                    <div className="stat-value" style={{ color: 'var(--accent-success)' }}>{executeCount}</div>
+                    <div className="stat-label">Executed</div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow p-6">
-                    <div className="text-center">
-                        <div className="text-4xl font-bold text-red-600">{rejectCount}</div>
-                        <div className="text-sm text-gray-600 mt-2 font-medium">Rejected</div>
-                    </div>
+                <div className="card stat-card">
+                    <div className="stat-value" style={{ color: 'var(--accent-danger)' }}>{rejectCount}</div>
+                    <div className="stat-label">Rejected</div>
                 </div>
             </div>
 
             {/* Signals Table */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
+            <div className="card">
+                <div className="card-header">
+                    <h3 className="card-title">Recent Signals</h3>
+                    <span className="badge badge-info">{filteredSignals.length} signals</span>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                    <table className="table">
+                        <thead>
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Time</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Model</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Probability</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Action</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Reason</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Trade</th>
+                                <th>Time</th>
+                                <th>Stock</th>
+                                <th>Direction</th>
+                                <th>Regime</th>
+                                <th>Probability</th>
+                                <th>Action</th>
+                                <th>Reason</th>
+                                <th>Trade</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody>
                             {filteredSignals.map((signal) => (
-                                <tr key={signal.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                                <tr key={signal.id}>
+                                    <td className="font-mono text-sm">
                                         {formatTime(signal.timestamp)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            {signal.stock_symbol}
-                                        </span>
+                                    <td>
+                                        <span className="badge badge-info">{signal.stock_symbol}</span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                        {signal.model_name}
+                                    {/* V2: Direction */}
+                                    <td>
+                                        {signal.direction === 1 || signal.signal_type === 'BUY' ? (
+                                            <span className="badge badge-success">📈 LONG</span>
+                                        ) : signal.direction === 2 || signal.signal_type === 'SELL' ? (
+                                            <span className="badge badge-danger">📉 SHORT</span>
+                                        ) : (
+                                            <span className="badge" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>➖ HOLD</span>
+                                        )}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center gap-3">
+                                    {/* V2: Regime */}
+                                    <td>
+                                        {signal.regime === 'TREND_STABLE' && (
+                                            <span className="badge badge-success">📈 TREND</span>
+                                        )}
+                                        {signal.regime === 'TREND_VOLATILE' && (
+                                            <span className="badge badge-warning">⚡ VOLATILE</span>
+                                        )}
+                                        {signal.regime === 'RANGE_QUIET' && (
+                                            <span className="badge badge-info">➖ RANGE</span>
+                                        )}
+                                        {signal.regime === 'CHOP_PANIC' && (
+                                            <span className="badge badge-danger">🛑 PANIC</span>
+                                        )}
+                                        {!signal.regime && (
+                                            <span className="text-muted text-xs">V1</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        <div className="flex items-center gap-sm">
                                             {getProbabilityBar(signal.probability)}
                                             {signal.probability && (
-                                                <span className="text-sm font-semibold text-gray-700">
+                                                <span className="font-semibold text-sm">
                                                     {Math.round(signal.probability * 100)}%
                                                 </span>
                                             )}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td>
                                         {signal.action === 'EXECUTE' ? (
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                                                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                </svg>
-                                                EXECUTE
-                                            </span>
+                                            <span className="badge badge-success">✓ EXECUTE</span>
                                         ) : (
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                                                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                                </svg>
-                                                REJECT
-                                            </span>
+                                            <span className="badge badge-danger">✕ REJECT</span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                                    <td className="text-muted text-sm" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                         {signal.reason || '-'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                    <td>
                                         {signal.trade_id ? (
                                             <a
                                                 href={`/trades?id=${signal.trade_id}`}
-                                                className="text-blue-600 hover:text-blue-800 font-medium hover:underline"
+                                                className="text-primary font-medium"
+                                                style={{ textDecoration: 'none' }}
                                             >
                                                 View Trade →
                                             </a>
                                         ) : (
-                                            <span className="text-gray-400">-</span>
+                                            <span className="text-muted">-</span>
                                         )}
                                     </td>
                                 </tr>
@@ -306,14 +324,10 @@ export default function SignalMonitor() {
 
                             {filteredSignals.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-16 text-center">
-                                        <div className="flex flex-col items-center justify-center text-gray-500">
-                                            <svg className="w-16 h-16 mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                            <p className="text-lg font-medium">No signals yet</p>
-                                            <p className="text-sm mt-1">Signals will appear here in real-time as they are generated</p>
-                                        </div>
+                                    <td colSpan={8} style={{ padding: 'var(--spacing-2xl)', textAlign: 'center' }}>
+                                        <div className="text-muted" style={{ fontSize: '3rem', marginBottom: 'var(--spacing-md)' }}>📄</div>
+                                        <p className="font-medium text-muted">No signals yet</p>
+                                        <p className="text-muted text-sm mt-sm">Signals will appear here in real-time as they are generated</p>
                                     </td>
                                 </tr>
                             )}

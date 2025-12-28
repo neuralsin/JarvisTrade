@@ -379,7 +379,19 @@ def train_model(
         should_activate = False
         activation_reason = ""
         
-        if settings.AUTO_ACTIVATE_MODELS:
+        # =====================================================================
+        # INVERTED SIGNAL WEAPONIZATION - Activation Guard
+        # =====================================================================
+        model_state = metrics_clean.get('model_state', 'NORMAL')
+        is_inverted = metrics_clean.get('is_inverted', False)
+        inversion_metadata = metrics_clean.get('inversion_metadata', None)
+        
+        # CRITICAL: Never activate REJECT models
+        if model_state == 'REJECT':
+            should_activate = False
+            activation_reason = f"Model state REJECT: {inversion_metadata.get('reason', 'failed validation') if inversion_metadata else 'unknown'}"
+            logger.warning(f"🚨 Model REJECTED - not activating: {activation_reason}")
+        elif settings.AUTO_ACTIVATE_MODELS:
             # Check for dead model first
             is_dead = metrics_clean.get('is_dead', False)
             if is_dead:
@@ -394,7 +406,8 @@ def train_model(
                 
                 if auc >= min_auc and p_at_10 >= min_p_at_10:
                     should_activate = True
-                    activation_reason = f"AUC={auc:.4f} >= {min_auc}, P@10%={p_at_10:.4f} >= {min_p_at_10}"
+                    inversion_tag = " [INVERTED]" if is_inverted else ""
+                    activation_reason = f"AUC={auc:.4f} >= {min_auc}, P@10%={p_at_10:.4f} >= {min_p_at_10}{inversion_tag}"
                     logger.info(f"✅ Model meets quality thresholds - auto-activating: {activation_reason}")
                 else:
                     reasons = []
@@ -407,7 +420,7 @@ def train_model(
         
         metrics_clean['activation_reason'] = activation_reason
         
-        # Create model record
+        # Create model record with inversion state
         model_record = Model(
             name=model_name,
             model_type=model_type,
@@ -416,7 +429,11 @@ def train_model(
             stock_symbol=stock_symbol,
             trained_at=datetime.utcnow(),
             metrics_json=metrics_clean,
-            is_active=should_activate
+            is_active=should_activate,
+            # Inverted Signal Weaponization
+            is_inverted=is_inverted,
+            model_state=model_state,
+            inversion_metadata=inversion_metadata
         )
         db.add(model_record)
         db.commit()

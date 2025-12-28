@@ -116,6 +116,14 @@ class Model(Base):
     is_active = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # =========================================================================
+    # INVERTED SIGNAL WEAPONIZATION
+    # Models with AUC < 0.5 that learned inverse relationships can be flipped
+    # =========================================================================
+    is_inverted = Column(Boolean, default=False)  # Whether predictions are flipped
+    model_state = Column(Text, default='NORMAL')  # NORMAL, INVERTED, REJECT
+    inversion_metadata = Column(JSONB, nullable=True)  # raw_auc, flipped_auc, validation metrics
+    
     trades = relationship("Trade", back_populates="model")
     signals = relationship("Signal", back_populates="model")
 

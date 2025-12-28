@@ -259,6 +259,37 @@ class ModelTrainer:
             auc = 0.5
             flipped = False
         
+        # =====================================================================
+        # INVERTED SIGNAL WEAPONIZATION
+        # Use model_inverter for proper state detection and validation
+        # =====================================================================
+        from app.ml.model_inverter import detect_model_state, apply_inversion, validate_inverted_model, ModelState
+        
+        model_state, inversion_meta = detect_model_state(y_binary, y_prob)
+        
+        if model_state == ModelState.INVERTIBLE:
+            # Apply inversion and validate
+            y_prob_flipped = apply_inversion(y_prob)
+            is_valid, validation_meta = validate_inverted_model(
+                y_binary, y_prob_flipped,
+                model_type='xgboost',
+                n_samples=len(y_binary)
+            )
+            
+            if is_valid:
+                logger.info(f"🔄 INVERTED MODEL: Raw AUC={inversion_meta['raw_auc']:.4f} → Flipped AUC={inversion_meta['flipped_auc']:.4f}")
+                y_prob = y_prob_flipped
+                auc = inversion_meta['flipped_auc']
+                flipped = True
+                model_state = ModelState.INVERTED
+                inversion_meta['validation'] = validation_meta
+            else:
+                logger.warning(f"❌ Inversion validation failed: {validation_meta.get('checks_failed', [])}")
+                model_state = ModelState.REJECT
+                inversion_meta['validation'] = validation_meta
+        elif model_state == ModelState.REJECT:
+            logger.warning(f"❌ Model rejected: {inversion_meta.get('reason', 'unknown')}")
+        
         # Precision@TopK - THE METRIC THAT MATTERS
         p_at_10 = precision_at_k(y_binary, y_prob, k=0.10)
         p_at_5 = precision_at_k(y_binary, y_prob, k=0.05)
@@ -293,6 +324,11 @@ class ModelTrainer:
             "prob_std": float(np.std(y_prob)),
             "prob_min": float(np.min(y_prob)),
             "prob_max": float(np.max(y_prob)),
+            
+            # Inverted Signal Weaponization
+            "is_inverted": model_state == ModelState.INVERTED,
+            "model_state": model_state,
+            "inversion_metadata": inversion_meta,
             
             # Confusion matrix details
             "true_positives": int(tp),

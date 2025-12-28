@@ -80,6 +80,7 @@ export default function Trades() {
                         <thead>
                             <tr>
                                 <th>Symbol</th>
+                                <th>Side</th>
                                 <th>Entry</th>
                                 <th>Exit</th>
                                 <th>Qty</th>
@@ -93,6 +94,11 @@ export default function Trades() {
                             {trades.map((trade) => (
                                 <tr key={trade.id}>
                                     <td className="font-semibold">{trade.symbol}</td>
+                                    <td>
+                                        <span className={`badge ${trade.side === 'BUY' || trade.side === 'LONG' ? 'badge-success' : trade.side === 'SELL' || trade.side === 'SHORT' ? 'badge-danger' : 'badge-primary'}`}>
+                                            {trade.side === 'BUY' || trade.side === 'LONG' ? '📈 LONG' : trade.side === 'SELL' || trade.side === 'SHORT' ? '📉 SHORT' : trade.side || 'LONG'}
+                                        </span>
+                                    </td>
                                     <td>
                                         <div>₹{trade.entry_price?.toFixed(2)}</div>
                                         <div className="text-xs text-muted">{formatDate(trade.entry_ts)}</div>

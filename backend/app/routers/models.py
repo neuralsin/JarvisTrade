@@ -26,6 +26,17 @@ class TrainModelRequest(BaseModel):
     csv_dataset_id: Optional[str] = None  # NEW: CSV dataset ID for training
 
 
+class TrainV2Request(BaseModel):
+    """V2 Dual-Model Training Request."""
+    stock_symbol: str
+    model_name: Optional[str] = None
+    interval: str = '15m'
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    hyperparams_direction: Optional[Dict[str, Any]] = None
+    hyperparams_quality: Optional[Dict[str, Any]] = None
+
+
 @router.get("/")
 async def get_models(
     current_user: User = Depends(get_current_user),
@@ -194,6 +205,80 @@ async def trigger_training(
         return {
             "error": f"Failed to queue training task: {str(e)}",
             "details": "Check backend and Celery worker logs for more information"
+        }
+
+
+@router.post("/train-v2")
+async def trigger_training_v2(
+    request: TrainV2Request,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    V2 Dual-Model Training: Train Direction Scout + Quality Gatekeeper models.
+    
+    Creates 3 models:
+    - Model A: Direction Scout (multi-class: Neutral/Long/Short)
+    - Model B Long: Quality Gatekeeper for long trades
+    - Model B Short: Quality Gatekeeper for short trades
+    """
+    from app.tasks.model_training_v2 import train_v2_models
+    from app.celery_app import celery_app
+    
+    # Validate stock symbol
+    if not request.stock_symbol:
+        return {"error": "stock_symbol is required"}
+    
+    stock_symbol = request.stock_symbol.strip().upper()
+    
+    # Validate interval
+    valid_intervals = ['1m', '5m', '15m', '30m', '1h', '1d']
+    if request.interval not in valid_intervals:
+        return {"error": f"Invalid interval. Must be one of: {valid_intervals}"}
+    
+    # Auto-create instrument if needed
+    instrument = db.query(Instrument).filter(
+        Instrument.symbol == stock_symbol
+    ).first()
+    
+    if not instrument:
+        logger.info(f"Auto-creating instrument: {stock_symbol}")
+        instrument = Instrument(
+            symbol=stock_symbol,
+            name=stock_symbol,
+            exchange='NSE',
+            instrument_type='EQ'
+        )
+        db.add(instrument)
+        db.commit()
+    
+    # Queue V2 training task
+    try:
+        task = train_v2_models.delay(
+            stock_symbol=stock_symbol,
+            model_name=request.model_name,
+            interval=request.interval,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            hyperparams_direction=request.hyperparams_direction,
+            hyperparams_quality=request.hyperparams_quality
+        )
+        
+        logger.info(f"V2 training task queued: {task.id} for {stock_symbol}")
+        
+        return {
+            "status": "queued",
+            "task_id": task.id,
+            "stock_symbol": stock_symbol,
+            "engine_version": "v2",
+            "models_to_train": ["direction", "quality_long", "quality_short"]
+        }
+    except Exception as e:
+        logger.error(f"Failed to queue V2 training task: {str(e)}", exc_info=True)
+        return {
+            "error": f"Failed to queue V2 training task: {str(e)}",
+            "details": "Check backend and Celery worker logs"
         }
 
 

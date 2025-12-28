@@ -162,17 +162,45 @@ async def save_kite_credentials(
 
 
 @router.get("/kite/login-url")
-async def get_kite_login_url(current_user: User = Depends(get_current_user)):
+async def get_kite_login_url(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Spec 18: Kite OAuth flow - generate login URL
-    """
-    if not current_user.kite_api_key_encrypted:
-        raise HTTPException(status_code=400, detail="Kite API key not configured")
     
-    api_key = decrypt_text(current_user.kite_api_key_encrypted)
+    Uses credentials in this priority:
+    1. User's stored credentials (encrypted in DB)
+    2. Global credentials from .env (KITE_API_KEY)
+    """
+    api_key = None
+    
+    # Try user's stored credentials first
+    if current_user.kite_api_key_encrypted:
+        api_key = decrypt_text(current_user.kite_api_key_encrypted)
+        logger.info(f"Using user's stored Kite API key for {current_user.email}")
+    # Fall back to .env global credentials
+    elif settings.KITE_API_KEY:
+        api_key = settings.KITE_API_KEY
+        logger.info(f"Using global Kite API key from .env for {current_user.email}")
+        
+        # Also save to user record for callback to work
+        current_user.kite_api_key_encrypted = encrypt_text(settings.KITE_API_KEY)
+        if settings.KITE_API_SECRET:
+            current_user.kite_api_secret_encrypted = encrypt_text(settings.KITE_API_SECRET)
+        db.commit()
+        logger.info(f"Saved .env credentials to user record for {current_user.email}")
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=400, 
+            detail="Kite API key not configured. Add KITE_API_KEY to .env or save credentials in settings."
+        )
+    
     login_url = f"https://kite.zerodha.com/connect/login?api_key={api_key}&redirect_params={current_user.id}"
     
     return {"login_url": login_url}
+
 
 
 @router.get("/kite/callback")
@@ -246,15 +274,20 @@ async def kite_callback(
         )
 
 
-
 @router.get("/me")
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """
     Get current user information
     """
+    # Check if credentials are available (user record OR .env)
+    has_credentials = bool(current_user.kite_api_key_encrypted) or bool(settings.KITE_API_KEY)
+    has_access_token = bool(current_user.kite_access_token_encrypted)
+    
     return {
         "id": str(current_user.id),
         "email": current_user.email,
-        "has_kite_credentials": bool(current_user.kite_api_key_encrypted),
+        "has_kite_credentials": has_credentials,
+        "has_kite_access_token": has_access_token,
+        "kite_credentials_source": "user" if current_user.kite_api_key_encrypted else ("env" if settings.KITE_API_KEY else None),
         "auto_execute": current_user.auto_execute
     }

@@ -99,6 +99,90 @@ export default function Settings() {
                 </p>
             </div>
 
+            {/* V2 Engine Toggle */}
+            <div className="card mb-lg" style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(139, 92, 246, 0.1))', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>
+                            🎯 V2 Dual-Model Architecture
+                        </h3>
+                        <p className="text-sm text-muted">
+                            Enable bi-directional trading with Direction Scout + Quality Gatekeeper models.
+                            Supports Long AND Short trades with regime-aware execution.
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+                        <span className="text-sm text-muted">V1</span>
+                        <label style={{
+                            position: 'relative',
+                            width: '60px',
+                            height: '32px',
+                            cursor: 'pointer'
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={editedParams?.engine_version === 'v2'}
+                                onChange={(e) => setEditedParams({
+                                    ...editedParams,
+                                    engine_version: e.target.checked ? 'v2' : 'v1'
+                                })}
+                                style={{ display: 'none' }}
+                            />
+                            <span style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                background: editedParams?.engine_version === 'v2' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.2)',
+                                borderRadius: '16px',
+                                transition: 'background 0.3s'
+                            }} />
+                            <span style={{
+                                position: 'absolute',
+                                top: '4px',
+                                left: editedParams?.engine_version === 'v2' ? '32px' : '4px',
+                                width: '24px',
+                                height: '24px',
+                                background: 'white',
+                                borderRadius: '50%',
+                                transition: 'left 0.3s'
+                            }} />
+                        </label>
+                        <span className="text-sm font-semibold" style={{ color: editedParams?.engine_version === 'v2' ? 'var(--accent-primary)' : 'var(--text-muted)' }}>
+                            V2
+                        </span>
+                    </div>
+                </div>
+                {editedParams?.engine_version === 'v2' && (
+                    <div className="mt-md" style={{
+                        padding: 'var(--spacing-md)',
+                        background: 'rgba(139, 92, 246, 0.1)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid rgba(139, 92, 246, 0.3)'
+                    }}>
+                        <div className="grid grid-cols-4" style={{ gap: 'var(--spacing-md)' }}>
+                            <div>
+                                <div className="text-xs text-muted">Direction Model</div>
+                                <div className="text-sm font-semibold">Long / Short / Neutral</div>
+                            </div>
+                            <div>
+                                <div className="text-xs text-muted">Quality Model</div>
+                                <div className="text-sm font-semibold">P(win) Gate</div>
+                            </div>
+                            <div>
+                                <div className="text-xs text-muted">Regime Detection</div>
+                                <div className="text-sm font-semibold">4-State ADX/ATR</div>
+                            </div>
+                            <div>
+                                <div className="text-xs text-muted">Expectancy Filter</div>
+                                <div className="text-sm font-semibold">E[R] ≥ 0.20</div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
             {/* Parameters Form */}
             <div className="grid grid-cols-2">
                 <div className="card">

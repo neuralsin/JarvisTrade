@@ -47,7 +47,21 @@ export default function Models() {
 
     const handleWizardSubmit = async (formData) => {
         try {
-            const response = await axios.post('/api/v1/models/train', formData);
+            let response;
+
+            // Route to V2 API for dual-model architecture
+            if (formData.model_type === 'v2_dual') {
+                response = await axios.post('/api/v1/models/train-v2', {
+                    stock_symbol: formData.instrument_filter,
+                    model_name: formData.model_name,
+                    interval: formData.interval,
+                    start_date: formData.start_date,
+                    end_date: formData.end_date
+                });
+            } else {
+                // V1 training
+                response = await axios.post('/api/v1/models/train', formData);
+            }
 
             // Check if response contains an error (even with 200 status)
             if (response.data.error) {
@@ -59,7 +73,10 @@ export default function Models() {
             if (response.data.task_id) {
                 setTrainingTaskId(response.data.task_id);
                 setShowWizard(false);
-                alert(`Training started! Task ID: ${response.data.task_id}`);
+                const modelInfo = formData.model_type === 'v2_dual'
+                    ? 'V2 Dual-Model (Direction + Quality)'
+                    : formData.model_type;
+                alert(`Training started! Model: ${modelInfo}\nTask ID: ${response.data.task_id}`);
             } else {
                 alert('Training response missing task_id. Check backend logs.');
             }
@@ -181,14 +198,16 @@ export default function Models() {
                                     <div className="text-xs text-muted" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         <span style={{
                                             background: model.type === 'xgboost' ? '#10b981' :
-                                                model.type === 'lstm' ? '#8b5cf6' : '#f59e0b',
+                                                model.type === 'lstm' ? '#8b5cf6' :
+                                                    model.type === 'transformer' ? '#f59e0b' :
+                                                        model.type?.includes('v2') ? '#ef4444' : '#6b7280',
                                             color: 'white',
                                             padding: '2px 6px',
                                             borderRadius: '4px',
                                             fontSize: '10px',
                                             textTransform: 'uppercase'
                                         }}>
-                                            {model.type || 'xgboost'}
+                                            {model.type?.includes('v2') ? '🎯 V2' : model.type || 'xgboost'}
                                         </span>
                                         <span>Trained: {new Date(model.trained_at).toLocaleDateString()}</span>
                                     </div>
