@@ -326,6 +326,22 @@ def train_model(
             'progress': 40
         })
         
+        # CRITICAL FIX: Enforce minimum sample thresholds for each model type
+        # This prevents dead/collapsed models from insufficient data
+        sample_count = len(df_labeled)
+        
+        if model_type == 'transformer' and sample_count < 1000:
+            raise ValueError(
+                f"Insufficient samples for Transformer: {sample_count} < 1000 minimum. "
+                f"Use XGBoost for smaller datasets."
+            )
+        
+        if model_type == 'lstm' and sample_count < 500:
+            raise ValueError(
+                f"Insufficient samples for LSTM: {sample_count} < 500 minimum. "
+                f"Use XGBoost for smaller datasets."
+            )
+        
         if model_type == 'xgboost':
             model, metrics = _train_xgboost(df_labeled, hyperparams, self)
         elif model_type == 'lstm':
@@ -356,14 +372,40 @@ def train_model(
         # Convert numpy types to native Python
         metrics_clean = _convert_to_native(metrics)
         
-        # Check if model should be auto-activated
+        # FIXED: Correct activation logic based on expert guidance
+        # - Remove accuracy (invalid for imbalanced trading data)
+        # - Use AUC + Precision@TopK
+        # - Check for dead model
         should_activate = False
+        activation_reason = ""
+        
         if settings.AUTO_ACTIVATE_MODELS:
-            auc = metrics_clean.get('auc_roc', metrics_clean.get('test_auc', 0))
-            accuracy = metrics_clean.get('test_accuracy', metrics_clean.get('accuracy', 0))
-            if auc >= settings.MODEL_MIN_AUC and accuracy >= settings.MODEL_MIN_ACCURACY:
-                should_activate = True
-                logger.info(f"Model meets quality thresholds (AUC: {auc:.4f}) - auto-activating")
+            # Check for dead model first
+            is_dead = metrics_clean.get('is_dead', False)
+            if is_dead:
+                should_activate = False
+                activation_reason = f"Dead model: {metrics_clean.get('rejection_reason', 'collapsed predictions')}"
+                logger.warning(f"🚨 Model rejected: {activation_reason}")
+            else:
+                auc = metrics_clean.get('auc_roc', 0)
+                p_at_10 = metrics_clean.get('precision_at_10', 0)
+                min_auc = settings.MODEL_MIN_AUC
+                min_p_at_10 = getattr(settings, 'MODEL_MIN_PRECISION_AT_10', 0.60)
+                
+                if auc >= min_auc and p_at_10 >= min_p_at_10:
+                    should_activate = True
+                    activation_reason = f"AUC={auc:.4f} >= {min_auc}, P@10%={p_at_10:.4f} >= {min_p_at_10}"
+                    logger.info(f"✅ Model meets quality thresholds - auto-activating: {activation_reason}")
+                else:
+                    reasons = []
+                    if auc < min_auc:
+                        reasons.append(f"AUC {auc:.4f} < {min_auc}")
+                    if p_at_10 < min_p_at_10:
+                        reasons.append(f"P@10% {p_at_10:.4f} < {min_p_at_10}")
+                    activation_reason = "; ".join(reasons)
+                    logger.info(f"⚠️ Model below thresholds: {activation_reason}")
+        
+        metrics_clean['activation_reason'] = activation_reason
         
         # Create model record
         model_record = Model(

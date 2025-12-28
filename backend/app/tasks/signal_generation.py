@@ -84,6 +84,15 @@ def predict_with_model(model, model_type: str, features: pd.DataFrame) -> tuple:
     """
     Run prediction with any model type.
     
+    CRITICAL FIX: Binary models predict trade-worthiness, NOT direction.
+    - 1 = TRADE worth taking
+    - 0 = NO TRADE
+    
+    Therefore:
+    - High confidence → BUY (enter trade)
+    - Low confidence → HOLD (do not enter)
+    - SELL is NOT a valid prediction (it's position management)
+    
     Args:
         model: Loaded model object
         model_type: 'xgboost', 'lstm', or 'transformer'
@@ -91,50 +100,46 @@ def predict_with_model(model, model_type: str, features: pd.DataFrame) -> tuple:
     
     Returns:
         tuple: (signal_type, confidence)
-            signal_type: 'BUY', 'SELL', or 'HOLD'
+            signal_type: 'BUY' or 'HOLD' (SELL removed from ML signals)
             confidence: float between 0 and 1
     """
     if model_type == 'xgboost':
         proba = model.predict_proba(features)[0]
         
         if len(proba) == 3:
-            # Multi-class: [HOLD, BUY, SELL]
+            # Multi-class: [HOLD, BUY, SELL] - DEPRECATED but kept for compatibility
             predicted_class = int(model.predict(features)[0])
             confidence = float(proba[predicted_class])
-            signal_map = {0: 'HOLD', 1: 'BUY', 2: 'SELL'}
+            signal_map = {0: 'HOLD', 1: 'BUY', 2: 'HOLD'}  # SELL → HOLD (deprecated)
             return signal_map[predicted_class], confidence
         else:
-            # Binary: BUY vs not-BUY
+            # Binary: TRADE vs NO_TRADE
             confidence = float(proba[1])
-            # FIXED: Raised from 0.3 to 0.65 (was trading garbage probability regions)
+            
+            # CRITICAL FIX: Binary model only predicts BUY or HOLD
+            # SELL is NOT a valid signal from a binary trade-worthiness model
             if confidence >= 0.65:
                 return 'BUY', confidence
-            elif confidence <= 0.35:
-                return 'SELL', 1.0 - confidence
             else:
-                return 'HOLD', 0.5
+                return 'HOLD', 1.0 - confidence  # Confidence in HOLD
     
     elif model_type in ['lstm', 'transformer']:
-        # Neural networks output probability of BUY
+        # Neural networks output probability of TRADE
         X = features.values.reshape(1, -1)
         
         # For sequence models, we need to prepare sequences
         if hasattr(model, 'prepare_sequences'):
-            # Create a mini-batch for prediction
             import numpy as np
             seq_length = getattr(model, 'seq_length', 20)
-            # Pad features to create a sequence
             X = np.tile(X, (seq_length, 1)).reshape(1, seq_length, -1)
         
         proba = float(model.predict(X).flatten()[0])
         
-        # FIXED: Raised thresholds to match AUC useful region (was 0.6/0.4)
+        # CRITICAL FIX: Neural networks also only predict BUY or HOLD
         if proba >= 0.65:
             return 'BUY', proba
-        elif proba <= 0.35:
-            return 'SELL', 1.0 - proba
         else:
-            return 'HOLD', 0.5
+            return 'HOLD', 1.0 - proba
     
     else:
         raise ValueError(f"Unknown model type: {model_type}")

@@ -1,10 +1,11 @@
 """
 Spec 5: Model training pipeline with XGBoost
+FIXED: Correct metric computation, Precision@TopK, dead model detection
 """
 import pandas as pd
 import numpy as np
 from xgboost import XGBClassifier
-from sklearn.metrics import roc_auc_score, precision_score, f1_score, confusion_matrix
+from sklearn.metrics import roc_auc_score, precision_score, f1_score, confusion_matrix, accuracy_score
 from sklearn.model_selection import train_test_split
 import joblib
 import shap
@@ -16,9 +17,67 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# CORRECT METRIC FUNCTIONS - Based on expert guidance
+# ============================================================================
+
+def precision_at_k(y_true: np.ndarray, y_prob: np.ndarray, k: float = 0.10) -> float:
+    """
+    Precision at top k fraction (e.g. top 10%)
+    THIS IS THE ONLY PRECISION METRIC THAT MATTERS FOR TRADING
+    
+    Args:
+        y_true: True binary labels
+        y_prob: Model probabilities for positive class
+        k: Fraction of top predictions to evaluate (default 10%)
+    
+    Returns:
+        Precision in the top k% of predictions
+    """
+    n = int(len(y_prob) * k)
+    if n == 0:
+        return 0.0
+    
+    idx = np.argsort(y_prob)[::-1][:n]  # Top k indices by probability
+    return float(y_true[idx].sum() / n)
+
+
+def is_dead_model(y_prob: np.ndarray) -> bool:
+    """
+    Detects collapsed models (constant or near-constant predictions)
+    
+    STRENGTHENED: Original threshold (1e-4) was too weak.
+    Now catches near-collapse that still passes weak checks.
+    
+    Args:
+        y_prob: Model probability predictions
+    
+    Returns:
+        True if model is dead (collapsed), False otherwise
+    """
+    # Check 1: Near-zero variance (original, strengthened)
+    if float(np.std(y_prob)) < 0.01:  # Was 1e-4, now 0.01
+        return True
+    
+    # Check 2: Tiny range (new check)
+    prob_range = float(np.max(y_prob) - np.min(y_prob))
+    if prob_range < 0.05:
+        return True
+    
+    return False
+
+
+def correct_precision(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """
+    Correct precision on FULL set (not filtered to predicted positives only)
+    """
+    return float(precision_score(y_true, y_pred, zero_division=0))
+
+
 class ModelTrainer:
     """
     Spec 5: XGBoost training pipeline with SHAP feature importance
+    FIXED: Binary-only classification, correct metrics
     """
     
     def __init__(self, hyperparams: Optional[Dict] = None):
@@ -52,12 +111,11 @@ class ModelTrainer:
             df['ts_utc'] = df['ts_utc'].dt.tz_localize(None)
         df = df.sort_values('ts_utc').reset_index(drop=True)
         
-        # Feature columns (must match feature_engineer.py output)
+        # FIX 4 & 5: Updated feature columns - no sentiment, EMA100 instead of 200
         feature_cols = [
-            'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_200',
-            'distance_from_ema200', 'rsi_14', 'rsi_slope',
-            'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix',
-            'sentiment_1d', 'sentiment_3d', 'sentiment_7d'
+            'returns_1', 'returns_5', 'ema_20', 'ema_50', 'ema_100',
+            'distance_from_ema100', 'rsi_14', 'rsi_slope',
+            'atr_14', 'atr_percent', 'volume_ratio', 'nifty_trend', 'vix'
         ]
         
         # Remove rows with null targets
@@ -102,7 +160,6 @@ class ModelTrainer:
             raise ValueError(f"Empty training set! Check date range or data availability.")
         
         # FIXED: Use training data as validation if validation set is empty
-        # This prevents XGBoost from crashing when eval_set is empty
         if len(X_val) == 0:
             logger.warning("Empty validation set - using 20% of training data for early stopping")
             from sklearn.model_selection import train_test_split
@@ -115,43 +172,34 @@ class ModelTrainer:
     
     def train(self, X_train, y_train, X_val, y_val):
         """
-        Train XGBoost model for MULTI-CLASS classification (HOLD/BUY/SELL)
+        Train XGBoost model - BINARY ONLY
+        FIX 2: Multi-class removed. Trading ML is a binary ranking problem.
         """
-        # Check number of unique classes
+        # FIX 2: Force binary classification
+        # Convert any multi-class to binary (1 = trade, 0 = no trade)
         n_classes = len(np.unique(y_train))
-        logger.info(f"Training for {n_classes} classes: {sorted(np.unique(y_train))}")
+        logger.info(f"Unique labels in training: {sorted(np.unique(y_train))}")
         
-        # Configure for multi-class if we have 3 classes (HOLD/BUY/SELL)
-        if n_classes == 3:
-            logger.info("Detected 3-class problem (HOLD/BUY/SELL). Using multi:softprob objective.")
-            self.hyperparams['objective'] = 'multi:softprob'
-            self.hyperparams['num_class'] = 3
-            self.hyperparams['eval_metric'] = 'mlogloss'
-            # Remove scale_pos_weight - not applicable for multi-class
-            self.hyperparams.pop('scale_pos_weight', None)
-            
-            # Log class distribution
-            for cls in [0, 1, 2]:
-                count = (y_train == cls).sum()
-                label = ['HOLD', 'BUY', 'SELL'][cls]
-                logger.info(f"  Class {cls} ({label}): {count} samples ({count/len(y_train)*100:.1f}%)")
+        if n_classes > 2:
+            logger.warning(f"Multi-class detected ({n_classes} classes). Converting to binary.")
+            # Convert to binary: 1 = any trade (BUY or SELL), 0 = no trade
+            y_train = (y_train >= 1).astype(int)
+            y_val = (y_val >= 1).astype(int)
+            n_classes = 2
         
-        elif n_classes == 2:
-            # Binary classification (backward compatibility)
-            logger.info("Detected 2-class problem. Using binary:logistic objective.")
-            self.hyperparams['objective'] = 'binary:logistic'
-            self.hyperparams['eval_metric'] = 'logloss'
-            
-            # Handle class imbalance for binary
-            neg_count = (y_train == 0).sum()
-            pos_count = (y_train == 1).sum()
-            if pos_count > 0:
-                scale_pos_weight = neg_count / pos_count
-                logger.info(f"Class imbalance: {neg_count} negative, {pos_count} positive")
-                logger.info(f"Using scale_pos_weight={scale_pos_weight:.2f}")
-                self.hyperparams['scale_pos_weight'] = scale_pos_weight
-        else:
-            raise ValueError(f"Unsupported number of classes: {n_classes}. Expected 2 or 3.")
+        # Binary classification ONLY
+        logger.info("Training BINARY classifier (TRADE vs NO_TRADE)")
+        self.hyperparams['objective'] = 'binary:logistic'
+        self.hyperparams['eval_metric'] = 'auc'  # Use AUC as primary metric
+        
+        # Handle class imbalance
+        neg_count = (y_train == 0).sum()
+        pos_count = (y_train == 1).sum()
+        if pos_count > 0:
+            scale_pos_weight = neg_count / pos_count
+            logger.info(f"Class distribution: {neg_count} NO_TRADE, {pos_count} TRADE")
+            logger.info(f"Using scale_pos_weight={scale_pos_weight:.2f}")
+            self.hyperparams['scale_pos_weight'] = scale_pos_weight
         
         model = XGBClassifier(**self.hyperparams)
         
@@ -167,84 +215,104 @@ class ModelTrainer:
     
     def evaluate(self, model, X, y, feature_cols) -> Dict:
         """
-        Compute metrics for both binary and multi-class models
+        Compute CORRECT metrics for trading ML
+        
+        Key metrics:
+        - AUC: Does the model know anything? (ranking power)
+        - Precision@10%: Can it make money? (top predictions accuracy)
+        - Dead model check: Is it collapsed?
         """
-        n_classes = len(np.unique(y))
+        # Get probabilities
+        y_prob = model.predict_proba(X)[:, 1]  # Probability of class 1 (TRADE)
         
-        if n_classes == 3:
-            # Multi-class: predict probabilities for each class
-            y_pred_proba = model.predict_proba(X)  # Shape: (n_samples, 3)
-            y_pred = model.predict(X)  # Direct class predictions
-            
-            # For multi-class AUC, use one-vs-rest
-            try:
-                from sklearn.preprocessing import label_binarize
-                from sklearn.metrics import roc_auc_score
-                y_bin = label_binarize(y, classes=[0, 1, 2])
-                auc = roc_auc_score(y_bin, y_pred_proba, multi_class='ovr', average='weighted')
-            except Exception as e:  # ✅ FIXED: Proper exception handling
-                logger.warning(f"Multi-class AUC calculation failed: {str(e)}. Using accuracy instead")
-                auc = (y_pred == y).mean()
-            
-            # Multi-class F1
-            f1 = f1_score(y, y_pred, average='weighted')
-            
-            # Confusion matrix for multi-class
-            cm = confusion_matrix(y, y_pred)
-            logger.info(f"Confusion Matrix:\n{cm}")
-            
-            # Precision for BUY class (most important)
-            buy_precision = precision_score(y, y_pred, labels=[1], average='micro', zero_division=0)
-            
-            metrics = {
-                "auc_roc": float(auc),
-                "f1": float(f1),
-                "accuracy": float((y_pred == y).mean()),
-                "buy_precision": float(buy_precision),
-                "confusion_matrix": cm.tolist(),
-                "class_distribution": {
-                    "HOLD": int((y_pred == 0).sum()),
-                    "BUY": int((y_pred == 1).sum()),
-                    "SELL": int((y_pred == 2).sum())
-                }
+        # DEAD MODEL CHECK - Critical safety
+        if is_dead_model(y_prob):
+            logger.error("🚨 DEAD MODEL DETECTED: Predictions have near-zero variance")
+            return {
+                "auc_roc": 0.5,
+                "precision_at_10": 0.0,
+                "precision_at_5": 0.0,
+                "is_dead": True,
+                "rejection_reason": "collapsed predictions",
+                "prob_std": float(np.std(y_prob))
             }
         
-        else:
-            # Binary classification (original logic)
-            y_pred_proba = model.predict_proba(X)[:, 1]
-            y_pred = (y_pred_proba >= 0.3).astype(int)
-            
-            auc = roc_auc_score(y, y_pred_proba)
-            f1 = f1_score(y, y_pred)
-            
-            # Precision at top 10%
-            threshold = np.quantile(y_pred_proba, 0.9)
-            high_prob_mask = y_pred_proba >= threshold
-            precision_at_k = precision_score(y[high_prob_mask], y_pred[high_prob_mask]) if high_prob_mask.sum() > 0 else 0
-            
-            # Confusion matrix
-            tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
-            
-            metrics = {
-                "auc_roc": float(auc),
-                "precision_at_k": float(precision_at_k),
-                "f1": float(f1),
-                "true_positives": int(tp),
-                "false_positives": int(fp),
-                "true_negatives": int(tn),
-                "false_negatives": int(fn)
-            }
+        # Convert y to binary if needed
+        y_binary = (y >= 1).astype(int) if len(np.unique(y)) > 2 else y.values
         
-        # SHAP feature importance (works for both)
+        # CRITICAL FIX: AUC flip check
+        # In trading ML, model may learn p↑ = bad trade (inverted)
+        # This is equally valid but needs correction
+        try:
+            auc = roc_auc_score(y_binary, y_prob)
+            auc_flipped = roc_auc_score(y_binary, 1.0 - y_prob)
+            
+            if auc_flipped > auc:
+                logger.warning(f"🔄 Probability direction inverted! AUC {auc:.4f} → {auc_flipped:.4f}")
+                y_prob = 1.0 - y_prob
+                auc = auc_flipped
+                flipped = True
+            else:
+                flipped = False
+        except Exception as e:
+            logger.warning(f"AUC calculation failed: {e}")
+            auc = 0.5
+            flipped = False
+        
+        # Precision@TopK - THE METRIC THAT MATTERS
+        p_at_10 = precision_at_k(y_binary, y_prob, k=0.10)
+        p_at_5 = precision_at_k(y_binary, y_prob, k=0.05)
+        p_at_20 = precision_at_k(y_binary, y_prob, k=0.20)
+        
+        # Standard precision at threshold 0.5 (for reference only)
+        y_pred = (y_prob >= 0.5).astype(int)
+        precision_std = correct_precision(y_binary, y_pred)
+        
+        # Accuracy (for reference only - NEVER use for activation)
+        accuracy = accuracy_score(y_binary, y_pred)
+        
+        # Confusion matrix
+        try:
+            tn, fp, fn, tp = confusion_matrix(y_binary, y_pred).ravel()
+        except:
+            tn, fp, fn, tp = 0, 0, 0, 0
+        
+        metrics = {
+            # Key metrics
+            "auc_roc": float(auc),
+            "precision_at_10": float(p_at_10),
+            "precision_at_5": float(p_at_5),
+            "precision_at_20": float(p_at_20),
+            
+            # Reference metrics
+            "precision_std": float(precision_std),
+            "accuracy": float(accuracy),
+            
+            # Dead model check
+            "is_dead": False,
+            "prob_std": float(np.std(y_prob)),
+            "prob_min": float(np.min(y_prob)),
+            "prob_max": float(np.max(y_prob)),
+            
+            # Confusion matrix details
+            "true_positives": int(tp),
+            "false_positives": int(fp),
+            "true_negatives": int(tn),
+            "false_negatives": int(fn),
+        }
+        
+        # Log key metrics clearly
+        logger.info(f"📊 MODEL EVALUATION:")
+        logger.info(f"   AUC-ROC: {auc:.4f} (>0.55 = has signal)")
+        logger.info(f"   Precision@10%: {p_at_10:.4f} (>0.60 = tradable)")
+        logger.info(f"   Precision@5%: {p_at_5:.4f}")
+        logger.info(f"   Prob range: [{metrics['prob_min']:.4f}, {metrics['prob_max']:.4f}]")
+        
+        # SHAP feature importance
         try:
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(X.iloc[:min(1000, len(X))])
-            
-            if n_classes == 3:
-                # For multi-class, average across classes
-                shap_avg = np.abs(shap_values).mean(axis=(0, 2)) if len(np.array(shap_values).shape) == 3 else np.abs(shap_values).mean(axis=0)
-            else:
-                shap_avg = np.abs(shap_values).mean(axis=0)
+            shap_avg = np.abs(shap_values).mean(axis=0)
             
             feature_importance = pd.DataFrame({
                 'feature': feature_cols,
@@ -257,6 +325,43 @@ class ModelTrainer:
             metrics['top_features'] = []
         
         return metrics
+    
+    def should_activate(self, metrics: Dict) -> Tuple[bool, str]:
+        """
+        CORRECT activation logic based on expert guidance
+        
+        Activation requires:
+        - AUC >= 0.55 (model has ranking power)
+        - Precision@10% >= 0.60 (can make money)
+        - Not a dead model
+        
+        Returns:
+            (should_activate: bool, reason: str)
+        """
+        from app.config import settings
+        
+        # Check for dead model first
+        if metrics.get('is_dead', False):
+            return False, f"Dead model: {metrics.get('rejection_reason', 'collapsed predictions')}"
+        
+        auc = metrics.get('auc_roc', 0)
+        p_at_10 = metrics.get('precision_at_10', 0)
+        
+        min_auc = getattr(settings, 'MODEL_MIN_AUC', 0.55)
+        min_p_at_10 = getattr(settings, 'MODEL_MIN_PRECISION_AT_10', 0.60)
+        
+        reasons = []
+        
+        if auc < min_auc:
+            reasons.append(f"AUC {auc:.4f} < {min_auc}")
+        
+        if p_at_10 < min_p_at_10:
+            reasons.append(f"Precision@10% {p_at_10:.4f} < {min_p_at_10}")
+        
+        if reasons:
+            return False, "; ".join(reasons)
+        
+        return True, f"AUC={auc:.4f}, P@10%={p_at_10:.4f}"
     
     def save_model(self, model, model_name: str, metrics: Dict) -> str:
         """

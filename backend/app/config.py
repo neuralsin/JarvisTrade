@@ -89,6 +89,7 @@ class Settings(BaseSettings):
     # Model auto-activation - FIXED: Accuracy removed (invalid for imbalanced trading data)
     AUTO_ACTIVATE_MODELS: bool = True
     MODEL_MIN_AUC: float = 0.55  # Only AUC matters for ranking quality
+    MODEL_MIN_PRECISION_AT_10: float = 0.60  # Precision@TopK must be tradable
     
     # Peak detection settings
     PEAK_EXIT_ENABLED: bool = True
