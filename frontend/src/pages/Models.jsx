@@ -213,7 +213,17 @@ export default function Models() {
                                     </div>
                                     {model.metrics && (
                                         <div className="text-sm mt-sm">
-                                            AUC: {(model.metrics.auc_roc || model.metrics.test_auc || 0).toFixed(3)}
+                                            <span style={{
+                                                color: (model.metrics.auc_roc || model.metrics.auc_long || model.metrics.test_auc || 0) >= 0.52
+                                                    ? '#10b981' : '#ef4444'
+                                            }}>
+                                                AUC: {(model.metrics.auc_roc || model.metrics.auc_long || model.metrics.test_auc || 0).toFixed(3)}
+                                            </span>
+                                            {model.type?.includes('v2') && model.metrics.precision_at_10_long && (
+                                                <span style={{ marginLeft: '8px', color: '#8b5cf6' }}>
+                                                    P@10%: {(model.metrics.precision_at_10_long || 0).toFixed(2)}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -241,31 +251,86 @@ export default function Models() {
                                 <div className="grid grid-cols-4">
                                     <div>
                                         <div className="text-muted text-sm">AUC</div>
-                                        <div className="text-xl font-bold">
-                                            {(selectedModel.metrics?.auc_roc || selectedModel.metrics?.test_auc || 0).toFixed(3)}
+                                        <div className="text-xl font-bold" style={{
+                                            color: (selectedModel.metrics?.auc_roc || selectedModel.metrics?.auc_long || 0) >= 0.52
+                                                ? '#10b981' : '#ef4444'
+                                        }}>
+                                            {(selectedModel.metrics?.auc_roc || selectedModel.metrics?.auc_long || selectedModel.metrics?.test_auc || 0).toFixed(3)}
                                         </div>
+                                        <div className="text-xs text-muted">Min: 0.52</div>
                                     </div>
                                     <div>
                                         <div className="text-muted text-sm">
-                                            {selectedModel.metrics?.precision_at_k ? 'Precision@K' : 'Test Precision'}
+                                            {selectedModel.type?.includes('v2') ? 'Precision@10%' : 'Precision'}
                                         </div>
-                                        <div className="text-xl font-bold">
-                                            {(selectedModel.metrics?.precision_at_k || selectedModel.metrics?.test_precision || 0).toFixed(3)}
+                                        <div className="text-xl font-bold" style={{
+                                            color: (selectedModel.metrics?.precision_at_10 || selectedModel.metrics?.precision_at_10_long || 0) >= 0.40
+                                                ? '#10b981' : '#ef4444'
+                                        }}>
+                                            {(selectedModel.metrics?.precision_at_10 ||
+                                                selectedModel.metrics?.precision_at_10_long ||
+                                                selectedModel.metrics?.precision_at_k ||
+                                                selectedModel.metrics?.test_precision || 0).toFixed(3)}
                                         </div>
+                                        {selectedModel.type?.includes('v2') && (
+                                            <div className="text-xs text-muted">Min: 0.40</div>
+                                        )}
                                     </div>
                                     <div>
                                         <div className="text-muted text-sm">
-                                            {selectedModel.metrics?.f1 ? 'F1 Score' : 'Test Accuracy'}
+                                            {selectedModel.type?.includes('v2') ? 'Precision@5%' : 'Samples'}
                                         </div>
                                         <div className="text-xl font-bold">
-                                            {(selectedModel.metrics?.f1 || selectedModel.metrics?.test_accuracy || 0).toFixed(3)}
+                                            {selectedModel.type?.includes('v2')
+                                                ? (selectedModel.metrics?.precision_at_5 || selectedModel.metrics?.precision_at_5_long || 0).toFixed(3)
+                                                : (selectedModel.metrics?.n_samples || selectedModel.metrics?.test_accuracy || '-')}
                                         </div>
                                     </div>
                                     <div>
                                         <div className="text-muted text-sm">Type</div>
-                                        <div className="text-sm font-semibold">{selectedModel.type}</div>
+                                        <div className="text-sm font-semibold" style={{
+                                            color: selectedModel.type?.includes('v2') ? '#8b5cf6' : 'inherit'
+                                        }}>
+                                            {selectedModel.type?.includes('v2') ? '🎯 V2 Dual-Model' : selectedModel.type}
+                                        </div>
+                                        {selectedModel.metrics?.is_inverted && (
+                                            <div className="text-xs" style={{ color: '#f59e0b' }}>🔄 Inverted</div>
+                                        )}
                                     </div>
                                 </div>
+
+                                {/* V2 Model Direction Metrics */}
+                                {selectedModel.type?.includes('v2') && selectedModel.metrics?.auc_long && (
+                                    <div className="grid grid-cols-4 mt-md" style={{
+                                        borderTop: '1px solid rgba(255,255,255,0.1)',
+                                        paddingTop: 'var(--spacing-md)'
+                                    }}>
+                                        <div>
+                                            <div className="text-muted text-sm">AUC Long</div>
+                                            <div className="text-lg font-bold">
+                                                {(selectedModel.metrics?.auc_long || 0).toFixed(3)}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-muted text-sm">AUC Short</div>
+                                            <div className="text-lg font-bold">
+                                                {(selectedModel.metrics?.auc_short || 0).toFixed(3)}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-muted text-sm">P@10% Long</div>
+                                            <div className="text-lg font-bold">
+                                                {(selectedModel.metrics?.precision_at_10_long || 0).toFixed(3)}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-muted text-sm">P@10% Short</div>
+                                            <div className="text-lg font-bold">
+                                                {(selectedModel.metrics?.precision_at_10_short || 0).toFixed(3)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Feature Importance */}

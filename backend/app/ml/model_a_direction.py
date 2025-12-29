@@ -348,7 +348,10 @@ class DirectionScout:
     
     def evaluate(self, X_test: np.ndarray, y_test: np.ndarray) -> Dict:
         """
-        Evaluate model performance with inversion detection.
+        Evaluate model performance with CORRECT metrics.
+        
+        V2 FIX: Removed banned metrics (accuracy, F1)
+        Added: Precision@TopK (the only metric that matters for trading)
         
         Args:
             X_test: Test features
@@ -360,11 +363,8 @@ class DirectionScout:
         y_pred = self.model.predict(X_test)
         y_proba = self.model.predict_proba(X_test)
         
-        report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
-        
         # =========================================================================
         # INVERTED SIGNAL WEAPONIZATION - Per-class inversion detection
-        # For multi-class, we check Long and Short classes separately
         # =========================================================================
         from app.ml.model_inverter import detect_model_state, ModelState
         
@@ -405,20 +405,42 @@ class DirectionScout:
             model_state = ModelState.NORMAL
             is_inverted = False
         
+        # =========================================================================
+        # V2 FIX: Precision@TopK - THE ONLY METRIC THAT MATTERS
+        # Accuracy and F1 are BANNED - they optimize for wrong objective
+        # =========================================================================
+        def precision_at_k(y_true: np.ndarray, y_prob: np.ndarray, k: float = 0.10) -> float:
+            """Precision at top k fraction"""
+            n = int(len(y_prob) * k)
+            if n == 0:
+                return 0.0
+            idx = np.argsort(y_prob)[::-1][:n]
+            return float(y_true[idx].sum() / n)
+        
+        # Precision@10% for Long and Short
+        precision_at_10_long = precision_at_k(y_long_binary, y_long_prob, k=0.10)
+        precision_at_10_short = precision_at_k(y_short_binary, y_short_prob, k=0.10)
+        precision_at_5_long = precision_at_k(y_long_binary, y_long_prob, k=0.05)
+        precision_at_5_short = precision_at_k(y_short_binary, y_short_prob, k=0.05)
+        
+        # Support counts (for reference)
+        support_long = int((y_test == 1).sum())
+        support_short = int((y_test == 2).sum())
+        support_neutral = int((y_test == 0).sum())
+        
         metrics = {
-            'accuracy': float(report['accuracy']),
+            # PRIMARY METRICS (what matters for trading)
             'auc_long': float(auc_long),
             'auc_short': float(auc_short),
-            'precision_neutral': float(report.get('0', {}).get('precision', 0)),
-            'precision_long': float(report.get('1', {}).get('precision', 0)),
-            'precision_short': float(report.get('2', {}).get('precision', 0)),
-            'recall_long': float(report.get('1', {}).get('recall', 0)),
-            'recall_short': float(report.get('2', {}).get('recall', 0)),
-            'f1_long': float(report.get('1', {}).get('f1-score', 0)),
-            'f1_short': float(report.get('2', {}).get('f1-score', 0)),
-            'support_neutral': int(report.get('0', {}).get('support', 0)),
-            'support_long': int(report.get('1', {}).get('support', 0)),
-            'support_short': int(report.get('2', {}).get('support', 0)),
+            'precision_at_10_long': float(precision_at_10_long),
+            'precision_at_10_short': float(precision_at_10_short),
+            'precision_at_5_long': float(precision_at_5_long),
+            'precision_at_5_short': float(precision_at_5_short),
+            
+            # REFERENCE ONLY (not for activation decisions)
+            'support_neutral': support_neutral,
+            'support_long': support_long,
+            'support_short': support_short,
             'feature_importance': self.feature_importance,
             
             # Inverted Signal Weaponization
@@ -436,12 +458,15 @@ class DirectionScout:
         self.is_long_inverted = is_long_inverted
         self.is_short_inverted = is_short_inverted
         
-        logger.info(f"Direction model evaluation: Accuracy={metrics['accuracy']:.3f}, "
-                    f"AUC_Long={metrics['auc_long']:.3f}, AUC_Short={metrics['auc_short']:.3f}")
+        # Log key metrics clearly
+        logger.info(f"📊 Direction Model Evaluation:")
+        logger.info(f"   AUC_Long: {auc_long:.4f} | AUC_Short: {auc_short:.4f}")
+        logger.info(f"   Precision@10%_Long: {precision_at_10_long:.4f} | Short: {precision_at_10_short:.4f}")
         if is_inverted:
-            logger.info(f"🔄 INVERTED: Long={is_long_inverted}, Short={is_short_inverted}")
+            logger.info(f"   🔄 INVERTED: Long={is_long_inverted}, Short={is_short_inverted}")
         
         return metrics
+
     
     def save(self, path: str):
         """Save model to disk."""

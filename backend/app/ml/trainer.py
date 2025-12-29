@@ -362,42 +362,39 @@ class ModelTrainer:
         
         return metrics
     
-    def should_activate(self, metrics: Dict) -> Tuple[bool, str]:
+    def should_activate(self, metrics: Dict, n_samples: int = 0) -> Tuple[bool, str]:
         """
-        CORRECT activation logic based on expert guidance
+        V2 FIX: Use centralized kill conditions for activation decision.
         
-        Activation requires:
-        - AUC >= 0.55 (model has ranking power)
-        - Precision@10% >= 0.60 (can make money)
-        - Not a dead model
+        Delegates to kill_conditions module for consistent rejection logic.
         
+        Args:
+            metrics: Model evaluation metrics
+            n_samples: Number of training samples
+            
         Returns:
             (should_activate: bool, reason: str)
         """
-        from app.config import settings
+        from app.ml.kill_conditions import should_reject_model
         
-        # Check for dead model first
-        if metrics.get('is_dead', False):
-            return False, f"Dead model: {metrics.get('rejection_reason', 'collapsed predictions')}"
+        should_reject, reason, warnings = should_reject_model(
+            metrics=metrics,
+            n_samples=n_samples,
+            model_type='xgboost'
+        )
         
+        if should_reject:
+            return False, reason
+        
+        # Log warnings even on activation
+        if warnings:
+            for warning in warnings:
+                logger.warning(f"⚠️ {warning}")
+        
+        # Build success reason with key metrics
         auc = metrics.get('auc_roc', 0)
         p_at_10 = metrics.get('precision_at_10', 0)
-        
-        min_auc = getattr(settings, 'MODEL_MIN_AUC', 0.55)
-        min_p_at_10 = getattr(settings, 'MODEL_MIN_PRECISION_AT_10', 0.60)
-        
-        reasons = []
-        
-        if auc < min_auc:
-            reasons.append(f"AUC {auc:.4f} < {min_auc}")
-        
-        if p_at_10 < min_p_at_10:
-            reasons.append(f"Precision@10% {p_at_10:.4f} < {min_p_at_10}")
-        
-        if reasons:
-            return False, "; ".join(reasons)
-        
-        return True, f"AUC={auc:.4f}, P@10%={p_at_10:.4f}"
+        return True, f"✓ Model activated: AUC={auc:.4f}, P@10%={p_at_10:.4f}"
     
     def save_model(self, model, model_name: str, metrics: Dict) -> str:
         """

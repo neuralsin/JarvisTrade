@@ -183,6 +183,72 @@ export default function Settings() {
                 )}
             </div>
 
+            {/* V2 Kill Conditions (read-only display) */}
+            {editedParams?.engine_version === 'v2' && (
+                <div className="card mb-lg" style={{
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(139, 92, 246, 0.05))',
+                    border: '1px solid rgba(16, 185, 129, 0.2)'
+                }}>
+                    <h3 className="card-title" style={{ marginBottom: 'var(--spacing-md)' }}>
+                        🚫 V2 Model Kill Conditions
+                    </h3>
+                    <p className="text-sm text-muted mb-md">
+                        Models must pass ALL these thresholds to activate. Thresholds are set in backend code for safety.
+                    </p>
+                    <div className="grid grid-cols-4" style={{ gap: 'var(--spacing-md)' }}>
+                        <div style={{
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            padding: 'var(--spacing-md)',
+                            borderRadius: 'var(--radius-md)',
+                            textAlign: 'center'
+                        }}>
+                            <div className="text-xs text-muted">AUC (min)</div>
+                            <div className="text-xl font-bold" style={{ color: '#10b981' }}>≥ 0.52</div>
+                            <div className="text-xs text-muted">Ranking power</div>
+                        </div>
+                        <div style={{
+                            background: 'rgba(139, 92, 246, 0.1)',
+                            padding: 'var(--spacing-md)',
+                            borderRadius: 'var(--radius-md)',
+                            textAlign: 'center'
+                        }}>
+                            <div className="text-xs text-muted">P@10% (min)</div>
+                            <div className="text-xl font-bold" style={{ color: '#8b5cf6' }}>≥ 0.40</div>
+                            <div className="text-xs text-muted">Precision at top</div>
+                        </div>
+                        <div style={{
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            padding: 'var(--spacing-md)',
+                            borderRadius: 'var(--radius-md)',
+                            textAlign: 'center'
+                        }}>
+                            <div className="text-xs text-muted">Samples (min)</div>
+                            <div className="text-xl font-bold" style={{ color: '#f59e0b' }}>≥ 200</div>
+                            <div className="text-xs text-muted">Training data</div>
+                        </div>
+                        <div style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            padding: 'var(--spacing-md)',
+                            borderRadius: 'var(--radius-md)',
+                            textAlign: 'center'
+                        }}>
+                            <div className="text-xs text-muted">Prob Variance</div>
+                            <div className="text-xl font-bold" style={{ color: '#ef4444' }}>≥ 0.01</div>
+                            <div className="text-xs text-muted">Not collapsed</div>
+                        </div>
+                    </div>
+                    <div className="mt-md" style={{
+                        padding: 'var(--spacing-sm) var(--spacing-md)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '11px',
+                        color: 'var(--text-muted)'
+                    }}>
+                        ℹ️ Models failing any threshold will NOT activate. This prevents deploying broken or random models.
+                    </div>
+                </div>
+            )}
+
             {/* Parameters Form */}
             <div className="grid grid-cols-2">
                 <div className="card">
