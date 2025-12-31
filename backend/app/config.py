@@ -4,6 +4,7 @@ Configuration management using pydantic-settings with 12-factor pattern
 """
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 import sys
 
 
@@ -22,7 +23,7 @@ class Settings(BaseSettings):
     # Zerodha Kite API
     KITE_API_KEY: Optional[str] = None
     KITE_API_SECRET: Optional[str] = None
-    KITE_REDIRECT_URL: str = "http://localhost:8000/auth/kite/callback"
+    KITE_REDIRECT_URL: str = os.getenv("KITE_REDIRECT_URL", "http://localhost:8000/auth/kite/callback")
     
     # Email notifications
     SMTP_HOST: str = "smtp.gmail.com"
@@ -40,10 +41,17 @@ class Settings(BaseSettings):
     PROB_STRONG: float = 0.70  # Adjusted accordingly
     MAX_TRADES_PER_DAY: int = 3
     
-    # Model auto-activation (Phase 1)
-    AUTO_ACTIVATE_MODELS: bool = True  # Auto-activate models with good metrics
-    MODEL_MIN_AUC: float = 0.60  # Minimum AUC to auto-activate
-    MODEL_MIN_ACCURACY: float = 0.55  # Minimum accuracy to auto-activate
+    # Bug fix: New trading safety parameters
+    DEFAULT_INTERVAL: str = "15m"  # Default timeframe for data fetching
+    MAX_POSITION_SIZE: int = 500  # Maximum position size cap (legacy - use MAX_POSITION_VALUE)
+    MAX_POSITION_VALUE: float = 100000.0  # CRITICAL FIX: Max ₹1L per trade (price-agnostic)
+    MIN_ATR_FLOOR_PCT: float = 0.005  # 0.5% minimum ATR floor to prevent divide-by-zero
+    MAX_STOCKS_TO_SCAN: int = 50  # Configurable limit for stock scanning
+    PORTFOLIO_HEAT_MAX_PCT: float = 0.20  # 20% max portfolio heat
+    
+    # Model auto-activation (Phase 1) - NOTE: Duplicates removed, see lines 89-92 for active values
+    # AUTO_ACTIVATE_MODELS, MODEL_MIN_AUC moved to single definition below
+    MODEL_MIN_ACCURACY: float = 0.55  # Minimum accuracy (kept for backward compat)
     
     # Feature computation (Phase 1)
     FEATURE_CACHE_SECONDS: int = 60  # Cache features for 60 seconds

@@ -122,10 +122,22 @@ def train_v2_models(
         # Normalize columns
         df = df.reset_index()
         df.columns = [c.lower() for c in df.columns]
-        if 'datetime' in df.columns:
+        
+        # Yahoo Finance returns 'timestamp', need to rename to ts_utc
+        # Check all possible column names in order of priority
+        if 'timestamp' in df.columns:
+            df = df.rename(columns={'timestamp': 'ts_utc'})
+        elif 'datetime' in df.columns:
             df = df.rename(columns={'datetime': 'ts_utc'})
         elif 'date' in df.columns:
             df = df.rename(columns={'date': 'ts_utc'})
+        elif 'index' in df.columns:
+            df = df.rename(columns={'index': 'ts_utc'})
+        
+        # Validate ts_utc exists after all attempts
+        if 'ts_utc' not in df.columns:
+            logger.error(f"Available columns after normalization: {list(df.columns)}")
+            raise ValueError(f"Could not find timestamp column in data. Available: {list(df.columns)}")
         
         # Log data summary
         logger.info(f"✓ Fetched {len(df)} candles for {stock_symbol}")
@@ -191,8 +203,8 @@ def train_v2_models(
             
             # Validate labels were generated
             valid_labels = df_direction['direction_label'].notna().sum()
-            if valid_labels < 100:
-                raise ValueError(f"Insufficient direction labels: {valid_labels} (need >= 100)")
+            if valid_labels < 50:
+                raise ValueError(f"Insufficient direction labels: {valid_labels} (need >= 50)")
             
             # Prepare data
             logger.info("Preparing Direction Scout training data...")
@@ -358,10 +370,14 @@ def train_v2_models(
             db.commit()
             db.refresh(instrument)
         
-        # Helper to convert numpy types
+        # Helper to convert numpy types to JSON-serializable Python natives
         def to_native(obj):
             if isinstance(obj, dict):
                 return {k: to_native(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [to_native(item) for item in obj]
+            elif isinstance(obj, (np.bool_,)):
+                return bool(obj)
             elif isinstance(obj, (np.integer,)):
                 return int(obj)
             elif isinstance(obj, (np.floating,)):

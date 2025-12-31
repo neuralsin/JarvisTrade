@@ -1,5 +1,5 @@
 """
-V2 Labeling System - Triple Barrier with Path Dependency
+V2/V3 Labeling System - Triple Barrier with Path Dependency
 
 CRITICAL CHANGES FROM V1:
 1. Entry at NEXT bar open (not current close)
@@ -7,6 +7,10 @@ CRITICAL CHANGES FROM V1:
 3. Path-dependent: checks high/low within each bar
 4. Timeouts excluded from training (-1 label)
 5. One label definition per dataset (V2 only)
+
+V3 ADDITION:
+- Uses unified ExecutionSimulator for consistency with backtest/paper
+- Dynamic slippage model (base + k*atr)
 
 Labels:
     1 = WIN: Target hit before stop
@@ -19,6 +23,19 @@ import logging
 from typing import Tuple, Optional
 
 logger = logging.getLogger(__name__)
+
+# V3: Import unified ExecutionSimulator
+try:
+    from app.ml.execution_simulator import (
+        get_labeler_simulator,
+        ExecutionSimulator,
+        get_simulator_version
+    )
+    HAS_EXECUTION_SIMULATOR = True
+    logger.info(f"✅ ExecutionSimulator v{get_simulator_version()} loaded for labeling")
+except ImportError:
+    HAS_EXECUTION_SIMULATOR = False
+    logger.warning("⚠️ ExecutionSimulator not available, using inline labeling")
 
 
 def generate_labels(
@@ -287,3 +304,124 @@ def generate_labels_multiclass(
     """DEPRECATED: Use generate_labels_v2() instead."""
     logger.warning("DEPRECATED: generate_labels_multiclass is obsolete. Using binary labels.")
     return generate_labels(df, target_pct=buy_target_pct, stop_pct=buy_stop_pct, window=window)
+
+
+# =============================================================================
+# V3 LABELING - Uses ExecutionSimulator for consistency
+# =============================================================================
+
+def generate_labels_v3(
+    df: pd.DataFrame,
+    direction: int = 1,
+    target_atr_mult: float = 1.5,
+    stop_atr_mult: float = 1.0,
+    time_limit_bars: int = 24,
+    regime: Optional[str] = None
+) -> pd.DataFrame:
+    """
+    V3 Triple Barrier Labeling using unified ExecutionSimulator.
+    
+    KEY IMPROVEMENTS OVER V2:
+    - Uses same ExecutionSimulator as backtest/paper (no code drift)
+    - Dynamic slippage model (base + k*atr)
+    - Regime-aware R:R targets
+    
+    Args:
+        df: DataFrame with OHLCV and atr_14 columns
+        direction: 1=Long, -1=Short
+        target_atr_mult: Base target multiplier (adjusted by regime)
+        stop_atr_mult: Base stop multiplier
+        time_limit_bars: Maximum bars to hold
+        regime: Market regime for R:R adjustment
+        
+    Returns:
+        DataFrame with 'target' column
+    """
+    if not HAS_EXECUTION_SIMULATOR:
+        logger.warning("ExecutionSimulator not available, falling back to V2 labeling")
+        return generate_labels_v2(
+            df, direction=direction, target_atr_mult=target_atr_mult,
+            stop_atr_mult=stop_atr_mult, time_limit_bars=time_limit_bars
+        )
+    
+    df = df.copy().sort_values('ts_utc').reset_index(drop=True)
+    
+    # Validate required columns
+    required = ['open', 'high', 'low', 'close', 'ts_utc']
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+    
+    # Ensure ATR is computed
+    if 'atr_14' not in df.columns:
+        logger.info("Computing ATR for labeling...")
+        from app.ml.feature_engineer import calculate_atr
+        df['atr_14'] = calculate_atr(df['high'], df['low'], df['close'], period=14)
+    
+    # Get unified simulator (same as backtest will use)
+    simulator = get_labeler_simulator()
+    
+    # REGIME-AWARE R:R ADJUSTMENT
+    # Wider targets in trends, tighter in ranges
+    regime_target_adj = {
+        'TREND_STABLE': 1.2,     # Widen target 20%
+        'TREND_VOLATILE': 1.0,   # Standard
+        'RANGE_QUIET': 0.8,      # Tighten target 20%
+        'CHOP_PANIC': 0.6,       # Much tighter or skip
+    }
+    
+    adj = regime_target_adj.get(regime, 1.0)
+    adjusted_target_mult = target_atr_mult * adj
+    
+    logger.info(f"V3 Labeling: direction={direction}, target_mult={adjusted_target_mult:.2f} "
+               f"(base={target_atr_mult}, regime_adj={adj})")
+    
+    # Convert direction to -1/1 format expected by simulator
+    sim_direction = 1 if direction == 1 else -1
+    
+    labels = []
+    
+    for i in range(len(df)):
+        # Use simulator's trade simulation
+        result = simulator.simulate_trade(
+            df=df,
+            signal_bar_idx=i,
+            direction=sim_direction,
+            stop_atr_mult=stop_atr_mult,
+            target_atr_mult=adjusted_target_mult,
+            time_limit_bars=time_limit_bars
+        )
+        
+        outcome = result.get('outcome')
+        labels.append(outcome)
+    
+    df['target'] = labels
+    
+    # Log distribution
+    valid = df['target'].notna()
+    if valid.sum() > 0:
+        wins = (df.loc[valid, 'target'] == 1).sum()
+        losses = (df.loc[valid, 'target'] == 0).sum()
+        timeouts = (df.loc[valid, 'target'] == -1).sum()
+        total = valid.sum()
+        logger.info(f"V3 Labels: {wins} wins ({wins/total*100:.1f}%), "
+                   f"{losses} losses ({losses/total*100:.1f}%), "
+                   f"{timeouts} timeouts ({timeouts/total*100:.1f}%)")
+    
+    return df
+
+
+def get_regime_rr_config(regime: str) -> Tuple[float, float]:
+    """
+    Get regime-aware R:R configuration.
+    
+    Returns:
+        (target_mult, stop_mult) - ATR multipliers for target/stop
+    """
+    configs = {
+        'TREND_STABLE': (2.0, 1.0),     # 2:1 R:R in stable trend
+        'TREND_VOLATILE': (1.5, 1.0),   # 1.5:1 in volatile trend
+        'RANGE_QUIET': (1.2, 0.8),      # Tighter, smaller risk
+        'CHOP_PANIC': (0.8, 0.5),       # Very tight, reduce quickly
+    }
+    return configs.get(regime, (1.5, 1.0))

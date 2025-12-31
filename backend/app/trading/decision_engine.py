@@ -44,17 +44,37 @@ class DecisionEngine:
     
     def check_daily_loss(self, user_id: str) -> float:
         """
-        Check user's daily loss
+        Bug fix #7: Check user's daily loss INCLUDING unrealized PnL (MTM)
         """
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         
+        # Realized P&L from closed trades
         daily_pnl = self.db.query(func.sum(Trade.pnl)).filter(
             Trade.user_id == user_id,
             Trade.created_at >= today_start,
             Trade.pnl.isnot(None)
         ).scalar() or 0
         
-        loss_pct = abs(daily_pnl) / self.account_capital if daily_pnl < 0 else 0
+        # Bug fix #7: Include unrealized P&L from open positions (MTM)
+        from sqlalchemy import text
+        open_trades = self.db.execute(text("""
+            SELECT entry_price, quantity, stop_loss, action FROM paper_trades
+            WHERE user_id = :user_id AND status = 'ACTIVE'
+        """), {"user_id": str(user_id)}).fetchall()
+        
+        unrealized_pnl = 0
+        for trade in open_trades:
+            entry_price, quantity, stop_loss, action = trade
+            if entry_price and quantity and stop_loss:
+                # Conservative MTM: assume worst case is stop loss hit
+                if action == 'BUY':
+                    unrealized = (stop_loss - entry_price) * quantity
+                else:  # SELL/SHORT
+                    unrealized = (entry_price - stop_loss) * quantity
+                unrealized_pnl += min(unrealized, 0)  # Only count losses
+        
+        total_pnl = daily_pnl + unrealized_pnl
+        loss_pct = abs(total_pnl) / self.account_capital if total_pnl < 0 else 0
         return loss_pct
     
     def check_daily_trade_count(self, user_id: str) -> int:
@@ -171,8 +191,11 @@ class DecisionEngine:
         rsi_14 = feature_json.get('rsi_14', 50)
         atr_percent = feature_json.get('atr_percent', 0)
         
-        if rsi_14 < 45:
-            return {"action": "NO_TRADE", "reason": "RSI_TOO_LOW", "prob": float(prob)}
+        # Bug fix #9: V1 Long-Only Bias - make RSI filter strategy-specific
+        # Only apply RSI < 45 filter for mean-reversion strategies, not momentum/trends
+        strategy = getattr(model, 'strategy', None) or feature_json.get('strategy', 'default')
+        if strategy == 'mean_reversion' and rsi_14 < 45:
+            return {"action": "NO_TRADE", "reason": "RSI_TOO_LOW_FOR_MEAN_REVERSION", "prob": float(prob)}
         
         if atr_percent > 0.05:
             return {"action": "NO_TRADE", "reason": "ATR_TOO_HIGH", "prob": float(prob)}

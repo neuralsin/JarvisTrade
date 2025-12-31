@@ -182,13 +182,19 @@ def validate_inverted_model(
     except Exception as e:
         validation["checks_failed"].append(f"flipped_auc_error: {str(e)}")
     
-    # Check 3: Precision@TopK
+    # Check 3: Precision@TopK - FIXED: Use fraction instead of literal K
     try:
+        # CRITICAL FIX: k was "top 10 samples", now "top 10% of samples"
+        # This matches trainer.py precision_at_k() calculation
+        n_samples = len(y_true)
+        k_samples = max(int(n_samples * 0.10), 10)  # 10% but at least 10 samples
+        
         # Sort by probability and take top K
-        sorted_indices = np.argsort(y_prob_flipped)[::-1][:k]
+        sorted_indices = np.argsort(y_prob_flipped)[::-1][:k_samples]
         top_k_true = y_true[sorted_indices]
         precision_at_k = np.mean(top_k_true)
         validation["precision_at_k"] = round(precision_at_k, 4)
+        validation["k_samples_used"] = k_samples  # For debugging
         
         if precision_at_k >= min_precision_at_k:
             validation["checks_passed"].append("precision_at_k")

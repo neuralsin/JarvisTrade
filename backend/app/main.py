@@ -55,8 +55,16 @@ app.include_router(backtest.router, prefix="/api/v1/backtest", tags=["backtestin
 app.include_router(options.router, prefix="/api/v1/options", tags=["options"])
 app.include_router(sentiment.router, prefix="/api/v1/sentiment", tags=["sentiment"])
 app.include_router(instruments.router, prefix="/api/v1/instruments", tags=["instruments"])
-app.include_router(trading_controls.router)  # Phase 5: Trading controls
+app.include_router(trading_controls.router, prefix="/api/v1/trading", tags=["trading"])  # Bug fix #14: Added missing prefix
 app.include_router(csv_upload.router, prefix="/api/v1/csv", tags=["csv"])  # CSV upload for training
+
+# V3 API endpoints (risk controls, sentiment, correlation, performance)
+try:
+    from app.api.v3_router import router as v3_router
+    app.include_router(v3_router)  # Already has /api/v1/v3 prefix
+    logger.info("✅ V3 API router loaded")
+except ImportError as e:
+    logger.warning(f"V3 router not available: {e}")
 
 # Phase 6: WebSocket endpoint for real-time signals
 from fastapi import WebSocket, WebSocketDisconnect
@@ -71,6 +79,7 @@ async def websocket_signals(websocket: WebSocket, token: str):
     Args:
         token: JWT token for authentication
     """
+    user_id = None  # CRITICAL FIX C01: Initialize scope variable to prevent UnboundLocalError
     try:
         # Decode token to get user
         payload = decode_token(token)
@@ -93,11 +102,13 @@ async def websocket_signals(websocket: WebSocket, token: str):
                 await websocket.send_text("pong")
     
     except WebSocketDisconnect:
-        ws_manager.disconnect(user_id, websocket)
-        logger.info (f"WebSocket disconnected for user {user_id}")
+        if user_id:  # CRITICAL FIX C01: Only disconnect if user_id was set
+            ws_manager.disconnect(user_id, websocket)
+            logger.info(f"WebSocket disconnected for user {user_id}")
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
-        ws_manager.disconnect(user_id, websocket)
+        if user_id:  # CRITICAL FIX C01: Only disconnect if user_id was set
+            ws_manager.disconnect(user_id, websocket)
 
 @app.on_event("startup")
 async def startup_event():

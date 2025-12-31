@@ -19,10 +19,10 @@ def fetch_nifty_trend(max_retries: int = 3) -> int:
     Fetch Nifty50 trend using EMA crossover strategy with retry logic
     
     Returns:
-        int: 1 for bullish (EMA20 > EMA50), 0 for bearish
+        int: 1 for bullish (EMA20 > EMA50), 0 for bearish, None on failure
     
-    Raises:
-        None - Always returns a value (defaults to 1 on failure)
+    Bug fix #21: Data Masking - Returns None on failure instead of bullish default
+    This allows the caller to properly handle missing data (set NaN, abort prediction)
     """
     # Check cache (5-minute TTL)
     cached = _market_data_cache['nifty_trend']
@@ -52,7 +52,7 @@ def fetch_nifty_trend(max_retries: int = 3) -> int:
                 
                 if len(timestamps) < 50:
                     logger.warning(f"Insufficient Nifty data ({len(timestamps)} rows, need 50+)")
-                    return 1
+                    return None  # Bug fix #21: Return None instead of bullish default
                 
                 # Build DataFrame
                 import pandas as pd
@@ -67,7 +67,7 @@ def fetch_nifty_trend(max_retries: int = 3) -> int:
                 
                 if not df_data:
                     logger.warning("No valid Nifty data")
-                    return 1
+                    return None  # Bug fix #21: Return None instead of bullish default
                 
                 hist = pd.DataFrame(df_data)
                 hist.set_index('timestamp', inplace=True)
@@ -96,7 +96,7 @@ def fetch_nifty_trend(max_retries: int = 3) -> int:
                 logger.warning(f"Nifty fetch HTTP {response.status_code}")
                 if attempt < max_retries - 1:
                     continue
-                return 1
+                return None  # Bug fix #21: Return None instead of bullish default
         
         except Exception as e:
             logger.error(f"Failed to fetch Nifty trend (attempt {attempt+1}/{max_retries}): {str(e)}")
@@ -104,8 +104,8 @@ def fetch_nifty_trend(max_retries: int = 3) -> int:
                 import time
                 time.sleep(1)
             else:
-                logger.error("All Nifty fetch attempts failed, defaulting to bullish")
-                return 1
+                logger.error("All Nifty fetch attempts failed - returning None")
+                return None  # Bug fix #21: Return None instead of bullish default
 
 
 def fetch_india_vix(max_retries: int = 3) -> float:
@@ -113,10 +113,10 @@ def fetch_india_vix(max_retries: int = 3) -> float:
     Fetch current India VIX (volatility index) with retry logic
     
     Returns:
-        float: VIX value or 20.0 as default fallback
+        float: VIX value or None on failure
     
-    Raises:
-        None - Always returns a value (defaults to 20.0 on failure)
+    Bug fix #21: Data Masking - Returns None on failure instead of calm default (20.0)
+    This allows the caller to properly handle missing data (set NaN, abort prediction)
     """
     # Check cache (15-minute TTL)
     cached = _market_data_cache['india_vix']
@@ -146,15 +146,15 @@ def fetch_india_vix(max_retries: int = 3) -> float:
                     logger.warning("No VIX data in response")
                     if attempt < max_retries - 1:
                         continue
-                    return 20.0
+                    return None  # Bug fix #21: Return None instead of calm default
                 
                 quotes = result['indicators']['quote'][0]
                 vix = float(quotes['close'][-1])  # Latest close
                 
                 # Validate VIX is in reasonable range (5-60)
                 if not (5.0 <= vix <= 60.0):
-                    logger.warning(f"VIX value {vix:.2f} outside expected range [5, 60], using default")
-                    return 20.0
+                    logger.warning(f"VIX value {vix:.2f} outside expected range [5, 60], returning None")
+                    return None  # Bug fix #21: Return None instead of calm default
                 
                 # Update cache
                 _market_data_cache['india_vix'] = {
@@ -174,7 +174,7 @@ def fetch_india_vix(max_retries: int = 3) -> float:
                 logger.warning(f"VIX fetch HTTP {response.status_code}")
                 if attempt < max_retries - 1:
                     continue
-                return 20.0
+                return None  # Bug fix #21: Return None instead of calm default
         
         except Exception as e:
             logger.error(f"Failed to fetch India VIX (attempt {attempt+1}/{max_retries}): {str(e)}")
@@ -182,8 +182,8 @@ def fetch_india_vix(max_retries: int = 3) -> float:
                 import time
                 time.sleep(1)
             else:
-                logger.error("All VIX fetch attempts failed, defaulting to 20.0")
-                return 20.0
+                logger.error("All VIX fetch attempts failed - returning None")
+                return None  # Bug fix #21: Return None instead of calm default
 
 
 def clear_market_data_cache():

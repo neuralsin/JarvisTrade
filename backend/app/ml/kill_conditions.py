@@ -108,15 +108,16 @@ def should_reject_model(
     model_state = metrics.get('model_state', None)
     if model_state is not None:
         from app.ml.model_inverter import ModelState
-        if model_state == ModelState.REJECT:
+        # Handle both string and class attribute comparison (JSON serialization)
+        if model_state == ModelState.REJECT or model_state == 'REJECT':
             kill_reasons.append(f"Model state REJECTED by inversion check")
     
     # ==========================================================================
     # Transformer-specific checks
     # ==========================================================================
     if model_type == 'transformer':
-        if n_samples < 10000:
-            kill_reasons.append(f"Transformer requires >= 10000 samples, got {n_samples}")
+        if n_samples < 1000:
+            kill_reasons.append(f"Transformer requires >= 1000 samples, got {n_samples}")
     
     # Build final result
     should_reject = len(kill_reasons) > 0

@@ -90,13 +90,22 @@ def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = 
     # Volume ratio
     df['volume_ratio'] = df['volume'] / df['volume'].rolling(20).mean()
     
+    # Bug fix #21: Data masking on failure - use None instead of default bullish values
     # Nifty trend - fetch real data
     nifty_trend_value = fetch_nifty_trend()
-    df['nifty_trend'] = nifty_trend_value
+    if nifty_trend_value is None:
+        logger.warning("⚠️ Nifty trend fetch failed - setting to NaN (not default bullish)")
+        df['nifty_trend'] = np.nan  # Bug fix: Don't default to 1 (bullish)
+    else:
+        df['nifty_trend'] = nifty_trend_value
     
     # VIX - fetch real India VIX
     vix_value = fetch_india_vix()
-    df['vix'] = vix_value
+    if vix_value is None:
+        logger.warning("⚠️ VIX fetch failed - setting to NaN (not default calm)")
+        df['vix'] = np.nan  # Bug fix: Don't default to 20.0 (calm market)
+    else:
+        df['vix'] = vix_value
     
     # FIX 4: Sentiment features REMOVED - they were contaminating training
     # When NEWS_API_KEY missing, sentiment=0.0 introduced systematic bias
@@ -117,6 +126,16 @@ def compute_features(df: pd.DataFrame, nifty_ema200: float = None, vix: float = 
     
     # Ensure data is sorted chronologically
     df = df.sort_values('ts_utc').reset_index(drop=True)
+    
+    # Bug fix #24: Row-stepping assumption - validate timestamp gaps
+    if len(df) > 1:
+        time_diffs = df['ts_utc'].diff().dropna()
+        if len(time_diffs) > 0:
+            median_gap = time_diffs.median()
+            large_gaps = time_diffs > (median_gap * 3)
+            if large_gaps.any():
+                gap_count = large_gaps.sum()
+                logger.warning(f"⚠️ {gap_count} large timestamp gaps detected in data - may indicate missing candles")
     
     # Verify no remaining NaN values in features
     feature_cols = [

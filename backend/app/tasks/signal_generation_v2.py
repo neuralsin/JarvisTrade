@@ -391,7 +391,7 @@ def generate_signals_v2(self):
             # Get user's watchlist or selected stocks
             # For now, use default stocks
             from app.tasks.data_ingestion import NIFTY_50_STOCKS
-            stocks = NIFTY_50_STOCKS[:10]  # Top 10
+            stocks = NIFTY_50_STOCKS[:settings.MAX_STOCKS_TO_SCAN]  # Bug fix #20: Use configurable limit
             
             for stock_symbol in stocks:
                 try:

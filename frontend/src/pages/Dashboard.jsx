@@ -275,6 +275,136 @@ export default function Dashboard() {
                     <div className="text-center text-muted" style={{ padding: 'var(--spacing-xl)' }}>No open trades</div>
                 )}
             </div>
+
+            {/* V3 Risk Controls Panel */}
+            {stats?.engine_version === 'v2' && (
+                <div className="grid grid-cols-3 mt-lg">
+                    {/* Override Mode */}
+                    <div className="card" style={{
+                        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1))',
+                        border: '1px solid rgba(139, 92, 246, 0.3)'
+                    }}>
+                        <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            🎛️ Override Mode
+                        </h3>
+                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap', marginTop: 'var(--spacing-md)' }}>
+                            {['FULL', 'REDUCED', 'LONG_ONLY', 'PAPER_ONLY', 'KILLED'].map(mode => (
+                                <button
+                                    key={mode}
+                                    className={`btn ${stats?.override_mode === mode ? 'btn-primary' : 'btn-outline'}`}
+                                    style={{
+                                        fontSize: '0.75rem',
+                                        padding: '4px 12px',
+                                        opacity: stats?.override_mode === mode ? 1 : 0.6
+                                    }}
+                                    onClick={() => {/* TODO: Implement mode change */ }}
+                                >
+                                    {mode === 'FULL' && '🟢'}
+                                    {mode === 'REDUCED' && '🟡'}
+                                    {mode === 'LONG_ONLY' && '📈'}
+                                    {mode === 'PAPER_ONLY' && '📝'}
+                                    {mode === 'KILLED' && '🛑'}
+                                    {' '}{mode}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-xs text-muted mt-md">
+                            {stats?.override_mode === 'FULL' && 'Full trading enabled'}
+                            {stats?.override_mode === 'REDUCED' && '50% position sizes'}
+                            {stats?.override_mode === 'LONG_ONLY' && 'No short positions allowed'}
+                            {stats?.override_mode === 'PAPER_ONLY' && 'Paper trading only'}
+                            {stats?.override_mode === 'KILLED' && 'All trading stopped'}
+                            {!stats?.override_mode && 'Full trading enabled (default)'}
+                        </p>
+                    </div>
+
+                    {/* Capital Curve Feedback */}
+                    <div className="card" style={{
+                        background: stats?.risk_reduction > 0
+                            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(245, 158, 11, 0.1))'
+                            : 'var(--bg-secondary)',
+                        border: stats?.risk_reduction > 0 ? '1px solid rgba(239, 68, 68, 0.3)' : 'none'
+                    }}>
+                        <h3 className="card-title">📉 Drawdown Protection</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--spacing-md)' }}>
+                            <div>
+                                <div className="text-sm text-muted">Current Drawdown</div>
+                                <div className="text-xl font-bold" style={{ color: (stats?.current_drawdown || 0) > 10 ? '#ef4444' : '#10b981' }}>
+                                    {(stats?.current_drawdown || 0).toFixed(1)}%
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <div className="text-sm text-muted">Risk Multiplier</div>
+                                <div className="text-xl font-bold" style={{ color: (stats?.risk_multiplier || 1) < 1 ? '#f59e0b' : '#10b981' }}>
+                                    {((stats?.risk_multiplier || 1) * 100).toFixed(0)}%
+                                </div>
+                            </div>
+                        </div>
+                        {(stats?.risk_reduction || 0) > 0 && (
+                            <div className="mt-md" style={{
+                                padding: 'var(--spacing-sm)',
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                borderRadius: 'var(--radius-sm)',
+                                fontSize: '11px'
+                            }}>
+                                ⚠️ Risk reduced by {(stats?.risk_reduction || 0).toFixed(0)}% due to drawdown
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sector Exposure */}
+                    <div className="card">
+                        <h3 className="card-title">🏢 Sector Exposure</h3>
+                        <div style={{ marginTop: 'var(--spacing-md)' }}>
+                            {stats?.sector_exposure && Object.entries(stats.sector_exposure).length > 0 ? (
+                                Object.entries(stats.sector_exposure).map(([sector, info]) => (
+                                    <div key={sector} style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        padding: 'var(--spacing-xs) 0',
+                                        borderBottom: '1px solid rgba(255,255,255,0.05)'
+                                    }}>
+                                        <span className="text-sm">{sector}</span>
+                                        <span className="text-sm font-semibold">
+                                            {info.count || 0} ({info.net_direction || 'N/A'})
+                                        </span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-center text-muted text-sm">No sector exposure</div>
+                            )}
+                        </div>
+                        <div className="mt-md text-xs text-muted">
+                            Max 2 positions per sector • 50% cap
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* V3 Performance Stats (if available) */}
+            {stats?.engine_version === 'v2' && stats?.regime_stats && (
+                <div className="card mt-lg" style={{
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(59, 130, 246, 0.05))'
+                }}>
+                    <h3 className="card-title">📊 Regime Performance (Decay-Weighted)</h3>
+                    <div className="grid grid-cols-4 mt-md">
+                        {Object.entries(stats.regime_stats).map(([regime, data]) => (
+                            <div key={regime} style={{ textAlign: 'center', padding: 'var(--spacing-md)' }}>
+                                <div className="text-xs text-muted">{regime}</div>
+                                <div className="text-lg font-bold" style={{
+                                    color: data.avg_r > 0 ? '#10b981' : data.avg_r < 0 ? '#ef4444' : '#9ca3af'
+                                }}>
+                                    {data.avg_r > 0 ? '+' : ''}{data.avg_r?.toFixed(2)}R
+                                </div>
+                                <div className="text-xs text-muted">
+                                    {(data.win_rate * 100).toFixed(0)}% win • {data.count} trades
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

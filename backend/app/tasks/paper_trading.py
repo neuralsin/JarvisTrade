@@ -81,6 +81,52 @@ def execute_paper_trades(self):
                     db.commit()
                     continue
                 
+                # =========================================================================
+                # Bug fix: Decision Engine Bypass - Route through DecisionEngine validation
+                # DecisionEngine enforces: kill switch, daily loss limits, trade count limits
+                # =========================================================================
+                
+                # Check 1: Kill switch
+                if decision_engine.check_kill_switch():
+                    logger.warning(f"Kill switch active - skipping signal {signal_id}")
+                    db.execute(text("UPDATE signals SET executed = true WHERE id = :id"), {"id": str(signal_id)})
+                    db.commit()
+                    continue
+                
+                # Check 2: Daily loss limit (with MTM)
+                daily_loss_pct = decision_engine.check_daily_loss(str(user_id))
+                from app.config import settings
+                if daily_loss_pct >= settings.MAX_DAILY_LOSS:
+                    logger.warning(f"Daily loss limit reached for user {user_id}: {daily_loss_pct:.2%}")
+                    db.execute(text("UPDATE signals SET executed = true WHERE id = :id"), {"id": str(signal_id)})
+                    db.commit()
+                    continue
+                
+                # Check 3: Max trades per day
+                trade_count = decision_engine.check_daily_trade_count(str(user_id))
+                if trade_count >= settings.MAX_TRADES_PER_DAY:
+                    logger.debug(f"Max trades per day reached for user {user_id}")
+                    db.execute(text("UPDATE signals SET executed = true WHERE id = :id"), {"id": str(signal_id)})
+                    db.commit()
+                    continue
+                
+                # Check 4: Portfolio heat (via RiskManager)
+                from app.trading.risk_manager import RiskManager
+                risk_manager = RiskManager(db)
+                heat_check = risk_manager.check_portfolio_heat(str(user_id))
+                if not heat_check.get('safe', True):
+                    logger.warning(f"Portfolio heat exceeded for user {user_id}: {heat_check.get('reason')}")
+                    db.execute(text("UPDATE signals SET executed = true WHERE id = :id"), {"id": str(signal_id)})
+                    db.commit()
+                    continue
+                
+                # Check 5: Confidence threshold
+                if confidence < settings.PROB_MIN:
+                    logger.debug(f"Signal confidence {confidence:.2f} below threshold {settings.PROB_MIN}")
+                    db.execute(text("UPDATE signals SET executed = true WHERE id = :id"), {"id": str(signal_id)})
+                    db.commit()
+                    continue
+                
                 # Get instrument
                 instrument = db.query(Instrument).filter(Instrument.id == instrument_id).first()
                 if not instrument:
@@ -105,14 +151,35 @@ def execute_paper_trades(self):
                 account_capital = settings.ACCOUNT_CAPITAL
                 risk_per_trade = settings.RISK_PER_TRADE
                 
-                # Use ATR for stop/target (default values if not available)
-                atr = current_price * 0.02  # 2% default ATR
-                stop_price = current_price - (settings.STOP_MULTIPLIER * atr)
-                target_price = current_price + (settings.TARGET_MULTIPLIER * atr)
+                # Bug fix #3: Fetch stop/target from Signal table instead of hardcoded 2% ATR
+                signal_record = db.execute(text("""
+                    SELECT stop_loss, take_profit FROM signals WHERE id = :id
+                """), {"id": str(signal_id)}).fetchone()
                 
+                if signal_record and signal_record[0] and signal_record[1]:
+                    stop_price = float(signal_record[0])
+                    target_price = float(signal_record[1])
+                else:
+                    # Fallback with volatility floor (Bug fix #4)
+                    atr = current_price * max(0.02, settings.MIN_ATR_FLOOR_PCT)
+                    stop_price = current_price - (settings.STOP_MULTIPLIER * atr)
+                    target_price = current_price + (settings.TARGET_MULTIPLIER * atr)
+                
+                # Bug fix #4: Volatility floor to prevent divide-by-zero
                 risk_per_share = current_price - stop_price
+                min_risk = current_price * settings.MIN_ATR_FLOOR_PCT
+                risk_per_share = max(risk_per_share, min_risk)
+                
                 risk_amount = account_capital * risk_per_trade
                 qty = int(risk_amount / risk_per_share) if risk_per_share > 0 else 1
+                
+                # Bug fix #4: Position size cap (share count - legacy)
+                qty = min(qty, settings.MAX_POSITION_SIZE)
+                
+                # CRITICAL FIX: Value-based position cap (prevents massive exposure on high-value stocks)
+                # e.g., ₹20,000 stock * 500 shares = ₹1 Crore exposure - DANGEROUS
+                max_qty_by_value = int(settings.MAX_POSITION_VALUE / current_price) if current_price > 0 else 1
+                qty = min(qty, max_qty_by_value)
                 
                 if qty <= 0:
                     qty = 1  # Minimum 1 share

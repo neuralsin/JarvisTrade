@@ -50,7 +50,8 @@ celery_app.autodiscover_tasks(['app.tasks'])
 import app.tasks  # noqa: E402, F401
 
 # STABILIZED Beat Schedule - reduced frequency to prevent overload
-celery_app.conf.beat_schedule = {
+# Bug fix: V1/V2 Task Bleed - Build schedule conditionally based on engine version
+_base_schedule = {
     # Data ingestion - daily only
     'fetch-eod-daily': {
         'task': 'app.tasks.data_ingestion.fetch_eod_bhavcopy',
@@ -104,22 +105,29 @@ celery_app.conf.beat_schedule = {
         'task': 'app.tasks.news_sentiment.fetch_and_analyze_news',
         'schedule': crontab(hour=6, minute=0),  # 6 AM UTC daily
     },
-    
-    # =========================================================================
-    # V2 DUAL-MODEL ARCHITECTURE TASKS
-    # These run alongside V1 but only execute if TRADING_ENGINE_VERSION == 'v2'
-    # =========================================================================
-    
-    # V2 Signal generation - every 5 minutes
-    'generate-signals-v2': {
-        'task': 'app.tasks.signal_generation_v2.generate_signals_v2',
-        'schedule': 300.0,  # Every 5 minutes
-    },
-    
-    # V2 Weekly retraining
-    'retrain-weekly-v2': {
-        'task': 'app.tasks.model_training_v2.scheduled_retrain_v2',
-        'schedule': crontab(hour=2, minute=30, day_of_week=1),  # Monday 2:30 AM UTC
-    },
 }
+
+# =========================================================================
+# V2 DUAL-MODEL ARCHITECTURE TASKS
+# Bug fix: Only schedule V2 tasks when TRADING_ENGINE_VERSION == 'v2'
+# Prevents resource waste and log pollution when V1 is active
+# =========================================================================
+_v2_schedule = {}
+if settings.TRADING_ENGINE_VERSION == 'v2':
+    _v2_schedule = {
+        # V2 Signal generation - every 5 minutes
+        'generate-signals-v2': {
+            'task': 'app.tasks.signal_generation_v2.generate_signals_v2',
+            'schedule': 300.0,  # Every 5 minutes
+        },
+        
+        # V2 Weekly retraining
+        'retrain-weekly-v2': {
+            'task': 'app.tasks.model_training_v2.scheduled_retrain_v2',
+            'schedule': crontab(hour=2, minute=30, day_of_week=1),  # Monday 2:30 AM UTC
+        },
+    }
+
+# Merge schedules
+celery_app.conf.beat_schedule = {**_base_schedule, **_v2_schedule}
 

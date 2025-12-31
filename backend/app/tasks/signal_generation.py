@@ -116,9 +116,9 @@ def predict_with_model(model, model_type: str, features: pd.DataFrame) -> tuple:
             # Binary: TRADE vs NO_TRADE
             confidence = float(proba[1])
             
-            # CRITICAL FIX: Binary model only predicts BUY or HOLD
-            # SELL is NOT a valid signal from a binary trade-worthiness model
-            if confidence >= 0.65:
+            # CRITICAL FIX: Use configurable threshold instead of hardcoded 0.65
+            from app.config import settings
+            if confidence >= settings.PROB_MIN:
                 return 'BUY', confidence
             else:
                 return 'HOLD', 1.0 - confidence  # Confidence in HOLD
@@ -135,8 +135,9 @@ def predict_with_model(model, model_type: str, features: pd.DataFrame) -> tuple:
         
         proba = float(model.predict(X).flatten()[0])
         
-        # CRITICAL FIX: Neural networks also only predict BUY or HOLD
-        if proba >= 0.65:
+        # CRITICAL FIX: Neural networks also use configurable threshold
+        from app.config import settings
+        if proba >= settings.PROB_MIN:
             return 'BUY', proba
         else:
             return 'HOLD', 1.0 - proba
@@ -268,10 +269,10 @@ def _process_model_signal(db, user: User, model_record: Model, stats: dict):
     feature_age = (datetime.utcnow() - latest_feature.ts_utc.replace(tzinfo=None)).total_seconds()
     
     if feature_age > FEATURE_MAX_AGE_SECONDS:
-        logger.warning(
-            f"Features for {stock_symbol} are stale ({feature_age:.0f}s old, max {FEATURE_MAX_AGE_SECONDS}s)"
+        logger.error(
+            f"Features for {stock_symbol} are stale ({feature_age:.0f}s old, max {FEATURE_MAX_AGE_SECONDS}s) - ABORTING SIGNAL"
         )
-        # Continue anyway for paper trading - just log warning
+        return  # Bug fix: Hard fail on stale data instead of warning
     
     # Check for recent signal (avoid duplicates)
     recent_signal = db.query(Signal).filter(

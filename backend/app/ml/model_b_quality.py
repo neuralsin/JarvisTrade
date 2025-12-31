@@ -282,6 +282,10 @@ class QualityGatekeeper:
         Returns:
             Tuple of (X_train, y_train, X_val, y_val, X_test, y_test)
         """
+        # Validate quality_label column exists
+        if 'quality_label' not in df.columns:
+            raise ValueError("quality_label column missing. Call generate_labels_triple_barrier() first.")
+        
         # Exclude timeout trades from training
         df_filtered = df[df['quality_label'] >= 0].copy()
         df_filtered = df_filtered.dropna(subset=self.FEATURE_COLUMNS)
@@ -463,9 +467,22 @@ class QualityGatekeeper:
         # Store inversion state for prediction
         self.is_inverted = is_inverted
         
+        # CRITICAL FIX: Compute Precision@K (this is what the UI shows!)
+        # Standard precision != Precision@K for trading
+        def precision_at_k(y_true, y_prob, k_frac=0.10):
+            """Precision at top k% of predictions"""
+            n = max(int(len(y_prob) * k_frac), 1)
+            idx = np.argsort(y_prob)[::-1][:n]
+            return float(y_true[idx].sum() / n) if n > 0 else 0.0
+        
+        p_at_10 = precision_at_k(y_test, y_proba, 0.10)
+        p_at_5 = precision_at_k(y_test, y_proba, 0.05)
+        
         metrics = {
             'auc_roc': float(roc_auc_score(y_test, y_proba)),
             'precision': float(precision_score(y_test, y_pred, zero_division=0)),
+            'precision_at_10': p_at_10,  # CRITICAL: This is what UI shows
+            'precision_at_5': p_at_5,    # CRITICAL: This is what UI shows
             'recall': float(recall_score(y_test, y_pred, zero_division=0)),
             'f1': float(f1_score(y_test, y_pred, zero_division=0)),
             'win_rate_predicted': float(np.mean(y_pred)),
@@ -480,7 +497,7 @@ class QualityGatekeeper:
         }
         
         logger.info(f"Quality model evaluation: AUC={metrics['auc_roc']:.3f}, "
-                    f"Precision={metrics['precision']:.3f}, Recall={metrics['recall']:.3f}")
+                    f"P@10%={p_at_10:.3f}, P@5%={p_at_5:.3f}")
         if is_inverted:
             logger.info(f"🔄 Quality model INVERTED")
         
@@ -496,7 +513,8 @@ class QualityGatekeeper:
             'model': self.model,
             'feature_importance': self.feature_importance,
             'hyperparams': self.hyperparams,
-            'direction': self.direction
+            'direction': self.direction,
+            'is_inverted': getattr(self, 'is_inverted', False)
         }, path)
         logger.info(f"Quality model saved to {path}")
     
@@ -507,4 +525,5 @@ class QualityGatekeeper:
         self.feature_importance = data.get('feature_importance')
         self.hyperparams = data.get('hyperparams', self.hyperparams)
         self.direction = data.get('direction', 1)
+        self.is_inverted = data.get('is_inverted', False)
         logger.info(f"Quality model loaded from {path}")

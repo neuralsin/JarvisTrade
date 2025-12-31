@@ -1,5 +1,5 @@
 """
-V2 Decision Engine
+V2/V3 Decision Engine
 Bi-directional trading with regime-aware position sizing and ATR-based exits.
 
 Supports:
@@ -8,6 +8,8 @@ Supports:
 - ATR-based stop/target calculation
 - Reversal exit detection
 - Time-based exits
+- V3: News sentiment conflict detection
+- V3: Calibrated probability checking
 """
 from app.db.database import SessionLocal
 from app.db.models import User, Trade, Instrument, SystemState
@@ -15,8 +17,29 @@ from app.config import settings
 from datetime import datetime, date
 from typing import Dict, Optional, Tuple
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
+
+# V3: Import news sentiment (optional)
+try:
+    from app.data.news_sentiment import (
+        get_news_provider,
+        sentiment_signal_conflict,
+        NewsSentimentResult
+    )
+    HAS_NEWS_SENTIMENT = True
+    logger.info("✅ News sentiment module loaded")
+except ImportError:
+    HAS_NEWS_SENTIMENT = False
+    logger.info("ℹ️ News sentiment module not available")
+
+# V3: Import calibration (optional)
+try:
+    from app.ml.calibration import ProbabilityCalibrator
+    HAS_CALIBRATION = True
+except ImportError:
+    HAS_CALIBRATION = False
 
 
 class DecisionEngineV2:

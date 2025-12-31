@@ -15,6 +15,14 @@ from app.tasks.news_sentiment import *  # noqa
 from app.tasks.signal_generation import *  # noqa
 from app.tasks.paper_trading import *  # noqa
 
+# ✅ V2 DUAL-MODEL TASKS - CRITICAL for V2 training
+try:
+    from app.tasks.model_training_v2 import *  # noqa
+    from app.tasks.signal_generation_v2 import *  # noqa
+except ImportError as e:
+    import logging
+    logging.warning(f"V2 tasks not available: {e}")
+
 __all__ = [
     'train_model',
     'scheduled_retrain',

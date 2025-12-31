@@ -34,9 +34,7 @@ def get_kite_client():
             return None
         
         # Try to get a user with Kite credentials
-        db = SessionLocal()
-        # Try to get a user with Kite credentials
-        db = SessionLocal()
+        db = SessionLocal()  # CRITICAL FIX C03: Removed duplicate - was causing connection pool leak
         try:
             user = db.query(User).filter(User.kite_access_token_encrypted.isnot(None)).first()
             

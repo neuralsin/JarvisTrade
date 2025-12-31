@@ -117,7 +117,11 @@ class DirectionScout:
                 detector = RegimeDetector()
                 df = detector.compute_indicators(df)
             
+            # NOTE: ADX is already computed by RegimeDetector WITHOUT shift
+            # We need to shift it here for proper feature lagging
             if 'adx_14' in df.columns:
+                # Only shift if not already lagged - check by comparing to original
+                # RegimeDetector.compute_indicators does NOT shift ADX, so we must shift here
                 df['adx_14'] = df['adx_14'].shift(1)
             else:
                 logger.warning("ADX computation failed, using zero")
@@ -478,7 +482,9 @@ class DirectionScout:
             'model': self.model,
             'feature_importance': self.feature_importance,
             'hyperparams': self.hyperparams,
-            'class_weights': self.class_weights
+            'class_weights': self.class_weights,
+            'is_long_inverted': getattr(self, 'is_long_inverted', False),
+            'is_short_inverted': getattr(self, 'is_short_inverted', False)
         }, path)
         logger.info(f"Direction model saved to {path}")
     
@@ -489,4 +495,6 @@ class DirectionScout:
         self.feature_importance = data.get('feature_importance')
         self.hyperparams = data.get('hyperparams', self.hyperparams)
         self.class_weights = data.get('class_weights', self.class_weights)
+        self.is_long_inverted = data.get('is_long_inverted', False)
+        self.is_short_inverted = data.get('is_short_inverted', False)
         logger.info(f"Direction model loaded from {path}")

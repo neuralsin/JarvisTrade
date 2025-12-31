@@ -41,6 +41,9 @@ def compute_fresh_features(self, instruments: list = None):
     This task runs every 60 seconds to ensure features are fresh for signal checking.
     Uses caching to respect Yahoo Finance rate limits (2000 req/hour).
     
+    Bug fix: Task Overlap - Uses Redis distributed lock to prevent race conditions
+    when task is scheduled every 2 minutes but previous run hasn't finished.
+    
     Args:
         instruments: Optional list of instrument symbols. If None, uses all instruments.
     
@@ -50,6 +53,21 @@ def compute_fresh_features(self, instruments: list = None):
     if not settings.FRESH_FEATURES_ENABLED:
         logger.info("Fresh features computation disabled in settings")
         return {"status": "disabled"}
+    
+    # Bug fix: Task Overlap - Use Redis distributed lock to prevent race conditions
+    import redis
+    try:
+        redis_client = redis.from_url(settings.REDIS_URL)
+        lock = redis_client.lock("fresh_features_lock", timeout=300, blocking=False)
+        acquired = lock.acquire(blocking=False)
+        
+        if not acquired:
+            logger.info("Another fresh_features task is running - skipping this execution")
+            return {"status": "skipped", "reason": "lock_held"}
+    except Exception as e:
+        logger.warning(f"Redis lock acquisition failed: {e}. Proceeding without lock.")
+        lock = None
+        acquired = False
     
     db = SessionLocal()
     
@@ -99,18 +117,27 @@ def compute_fresh_features(self, instruments: list = None):
                 start_date = end_date - timedelta(days=250)
                 
                 # First try to get from database
+                # Bug fix #1: Use configurable interval instead of hardcoded '1d'
+                interval = settings.DEFAULT_INTERVAL
                 candles = db.query(HistoricalCandle).filter(
                     HistoricalCandle.instrument_id == instrument.id,
-                    HistoricalCandle.timeframe == '1d',
+                    HistoricalCandle.timeframe == interval,
                     HistoricalCandle.ts_utc >= start_date
                 ).order_by(HistoricalCandle.ts_utc).all()
                 
-                # If we don't have recent data (within last 24 hours), fetch from Yahoo
+                # Bug fix #1: Check freshness based on interval, not hardcoded 24 hours
+                interval_seconds = {
+                    '1m': 60, '5m': 300, '15m': 900, '30m': 1800, 
+                    '1h': 3600, '1d': 86400, '1wk': 604800
+                }.get(interval, 900)  # Default to 15m
+                
                 needs_fetch = True
+                latest_ts = None  # Track for zombie fix
                 if candles:
                     latest_candle = max(candles, key=lambda c: c.ts_utc)
-                    hours_old = (datetime.utcnow() - latest_candle.ts_utc.replace(tzinfo=None)).total_seconds() / 3600
-                    if hours_old < 24:
+                    latest_ts = latest_candle.ts_utc
+                    seconds_old = (datetime.utcnow() - latest_candle.ts_utc.replace(tzinfo=None)).total_seconds()
+                    if seconds_old < interval_seconds:
                         needs_fetch = False
                 
                 if needs_fetch:
@@ -120,7 +147,7 @@ def compute_fresh_features(self, instruments: list = None):
                     try:
                         yahoo_df = fetch_ohlcv(
                             symbol=instrument.symbol,
-                            interval='1d',
+                            interval=interval,  # Bug fix #1: Use configured interval
                             days=5  # Just need recent data
                         )
                     except DataFetchError as e:
@@ -140,14 +167,14 @@ def compute_fresh_features(self, instruments: list = None):
                     # Check if this candle already exists
                     existing = db.query(HistoricalCandle).filter(
                         HistoricalCandle.instrument_id == instrument.id,
-                        HistoricalCandle.timeframe == '1d',
+                        HistoricalCandle.timeframe == interval,  # Bug fix #1
                         HistoricalCandle.ts_utc == latest_ts
                     ).first()
                     
                     if not existing:
                         new_candle = HistoricalCandle(
                             instrument_id=instrument.id,
-                            timeframe='1d',
+                            timeframe=interval,  # Bug fix #1
                             ts_utc=latest_ts,
                             open=float(latest_row['open']),
                             high=float(latest_row['high']),
@@ -164,7 +191,7 @@ def compute_fresh_features(self, instruments: list = None):
                 # Now get all candles for feature computation
                 candles = db.query(HistoricalCandle).filter(
                     HistoricalCandle.instrument_id == instrument.id,
-                    HistoricalCandle.timeframe == '1d',
+                    HistoricalCandle.timeframe == interval,  # Bug fix #1
                     HistoricalCandle.ts_utc >= start_date
                 ).order_by(HistoricalCandle.ts_utc).all()
                 
@@ -221,10 +248,20 @@ def compute_fresh_features(self, instruments: list = None):
                     Feature.ts_utc >= datetime.utcnow().replace(tzinfo=None) - timedelta(seconds=settings.FEATURE_MAX_AGE_SECONDS)
                 ).first()
                 
+                # Bug fix #2 & #5: Only update features if new data was actually fetched
                 if recent_feature:
-                    # Update existing feature
-                    recent_feature.feature_json = feature_dict
-                    recent_feature.ts_utc = datetime.utcnow()
+                    if needs_fetch:
+                        # Only update timestamp when we actually fetched new data
+                        recent_feature.feature_json = feature_dict
+                        recent_feature.ts_utc = datetime.utcnow()
+                        # Track actual data age (Bug fix #5: Feature timestamp fraud)
+                        if hasattr(recent_feature, 'source_data_ts'):
+                            recent_feature.source_data_ts = latest_ts
+                    else:
+                        # Bug fix #2: Skip update if no new data - prevents zombie updates
+                        logger.debug(f"Skipping feature update for {instrument.symbol} - no new data fetched")
+                        stats['cached'] += 1
+                        continue
                 else:
                     # Create new feature record
                     feature_record = Feature(
@@ -233,6 +270,9 @@ def compute_fresh_features(self, instruments: list = None):
                         feature_json=feature_dict,
                         target=None  # No label for real-time features
                     )
+                    # Track source data timestamp if column exists
+                    if hasattr(feature_record, 'source_data_ts'):
+                        feature_record.source_data_ts = latest_ts
                     db.add(feature_record)
                 
                 db.commit()
@@ -262,6 +302,12 @@ def compute_fresh_features(self, instruments: list = None):
     
     finally:
         db.close()
+        # Bug fix: Task Overlap - Release the Redis lock
+        if lock and acquired:
+            try:
+                lock.release()
+            except Exception:
+                pass  # Lock may have expired
 
 
 @celery_app.task(bind=True)

@@ -89,3 +89,43 @@ class RiskManager:
             kws = SystemState(key="kws_status", value=status)
             self.db.add(kws)
         self.db.commit()
+    
+    def check_portfolio_heat(self, user_id: str) -> Dict:
+        """
+        Bug fix #11: Check total capital at risk from open positions.
+        
+        Portfolio heat = sum of (position_size * risk_per_share) for all open positions
+        Prevents over-concentration of risk.
+        """
+        from sqlalchemy import text
+        
+        open_positions = self.db.execute(text("""
+            SELECT entry_price, quantity, stop_loss, action FROM paper_trades
+            WHERE user_id = :user_id AND status = 'ACTIVE'
+        """), {"user_id": str(user_id)}).fetchall()
+        
+        total_risk = 0
+        for pos in open_positions:
+            entry_price, quantity, stop_loss, action = pos
+            if entry_price and quantity and stop_loss:
+                risk_per_share = abs(entry_price - stop_loss)
+                position_risk = quantity * risk_per_share
+                total_risk += position_risk
+        
+        max_portfolio_heat = settings.ACCOUNT_CAPITAL * settings.PORTFOLIO_HEAT_MAX_PCT
+        
+        if total_risk > max_portfolio_heat:
+            logger.warning(f"Portfolio heat exceeded: {total_risk:.0f} > {max_portfolio_heat:.0f}")
+            return {
+                "safe": False,
+                "reason": f"Portfolio heat {total_risk:.0f} exceeds max {max_portfolio_heat:.0f}",
+                "total_risk": total_risk,
+                "max_risk": max_portfolio_heat
+            }
+        
+        return {
+            "safe": True, 
+            "remaining_capacity": max_portfolio_heat - total_risk,
+            "total_risk": total_risk,
+            "max_risk": max_portfolio_heat
+        }
