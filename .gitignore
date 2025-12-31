@@ -35,7 +35,7 @@ dist/
 .cache/
 
 # Environment variables
-
+.env
 
 # Database
 *.db
